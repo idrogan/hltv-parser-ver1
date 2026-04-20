@@ -1,0 +1,54 @@
+{
+  "name": "HLTV - Weekly CT-side winrate digest",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "weeks", "weeksInterval": 1, "triggerAtDay": [1], "triggerAtHour": 9 }
+          ]
+        }
+      },
+      "id": "trigger",
+      "name": "Every Monday 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "=http://hltv-parser:8000/team/{{$json.team_id}}/{{$json.slug}}/maps",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "months_back", "value": "5" }]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Authorization", "value": "Bearer {{$env.HLTV_API_TOKEN}}" }]
+        },
+        "options": { "response": { "response": { "responseFormat": "json" } } }
+      },
+      "id": "fetch",
+      "name": "GET /team/.../maps",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [620, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [{ "name": "team_id", "value": "4608" }, { "name": "slug", "value": "natus-vincere" }]
+        }
+      },
+      "id": "set-team",
+      "name": "Pick team",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [430, 300]
+    }
+  ],
+  "connections": {
+    "Every Monday 09:00": { "main": [[{ "node": "Pick team", "type": "main", "index": 0 }]] },
+    "Pick team": { "main": [[{ "node": "GET /team/.../maps", "type": "main", "index": 0 }]] }
+  }
+}

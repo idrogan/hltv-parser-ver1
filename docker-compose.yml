@@ -1,0 +1,12 @@
+services:
+  hltv-parser:
+    build: .
+    image: hltv-parser:latest
+    container_name: hltv-parser
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
