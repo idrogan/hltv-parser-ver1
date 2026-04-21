@@ -17,7 +17,7 @@
     },
     {
       "parameters": {
-        "url": "=http://hltv-parser:8000/team/{{$json.team_id}}/{{$json.slug}}/maps",
+        "url": "=http://esports-data:8000/hltv/team/{{$json.team_id}}/{{$json.slug}}/maps",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [{ "name": "months_back", "value": "5" }]

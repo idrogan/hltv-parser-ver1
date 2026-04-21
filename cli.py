@@ -1,25 +1,34 @@
-"""Command-line interface for the HLTV parser.
+"""Command-line interface across all data sources.
 
-Designed for ad-hoc runs and N8N's "Execute Command" node — every
-sub-command prints a single JSON document to stdout, so it can be piped
-straight into ``$json`` in N8N or a Make HTTP module's parse-JSON step.
+Every subcommand prints a single JSON document to stdout, so it can be
+piped straight into n8n's Execute Command node, jq, a cron+tee log, or
+a Supabase row insert.
 
 Examples
 --------
-    python cli.py team-maps 4608 natus-vincere --months-back 5
-    python cli.py player 7998 s1mple --start 2025-11-01 --end 2026-04-01
-    python cli.py rankings
-    python cli.py upcoming
-    python cli.py results
+    python cli.py hltv team-maps 4608 natus-vincere --months-back 5
+    python cli.py hltv rankings
+
+    python cli.py steam price "Sticker | Titan (Holo) | Katowice 2014"
+    python cli.py steam search "Katowice 2014 Holo" --count 30
+    python cli.py steam history "AK-47 | Redline (Field-Tested)"   # requires cookie
+
+    python cli.py escharts tournaments --game cs2
+    python cli.py escharts tournament cs2 iem-katowice-2024
 """
 from __future__ import annotations
 
 import argparse
 import json
 import logging
+import os
 import sys
 
-from hltv_parser import HLTVClient, HLTVService
+
+def _print(out) -> int:
+    json.dump(out, sys.stdout, ensure_ascii=False, indent=2, default=str)
+    sys.stdout.write("\n")
+    return 0
 
 
 def _add_window(p: argparse.ArgumentParser) -> None:
@@ -28,71 +37,119 @@ def _add_window(p: argparse.ArgumentParser) -> None:
     p.add_argument("--months-back", dest="months_back", type=int)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="hltv-parser")
-    parser.add_argument("--min-delay", type=float, default=2.0)
-    parser.add_argument("--proxy", default=None)
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="esports-data")
     parser.add_argument("--log-level", default="WARNING")
+    sources = parser.add_subparsers(dest="source", required=True)
 
-    sub = parser.add_subparsers(dest="cmd", required=True)
+    hltv = sources.add_parser("hltv", help="HLTV.org")
+    hltv.add_argument("--min-delay", type=float, default=2.0)
+    hltv.add_argument("--proxy", default=None)
+    h = hltv.add_subparsers(dest="cmd", required=True)
 
-    p_overview = sub.add_parser("team", help="Team overview stats")
-    p_overview.add_argument("team_id", type=int)
-    p_overview.add_argument("slug")
-    _add_window(p_overview)
+    p = h.add_parser("team"); p.add_argument("team_id", type=int); p.add_argument("slug"); _add_window(p)
+    p = h.add_parser("team-maps"); p.add_argument("team_id", type=int); p.add_argument("slug"); _add_window(p)
+    p = h.add_parser("team-matches"); p.add_argument("team_id", type=int); p.add_argument("slug"); _add_window(p)
+    p = h.add_parser("player"); p.add_argument("player_id", type=int); p.add_argument("slug"); _add_window(p)
+    p = h.add_parser("search-team"); p.add_argument("name")
+    h.add_parser("rankings")
+    h.add_parser("upcoming")
+    p = h.add_parser("results"); p.add_argument("--offset", type=int, default=0)
 
-    p_maps = sub.add_parser("team-maps", help="Per-map stats incl. CT/T round winrate")
-    p_maps.add_argument("team_id", type=int)
-    p_maps.add_argument("slug")
-    _add_window(p_maps)
+    steam = sources.add_parser("steam", help="Steam Community Market")
+    steam.add_argument("--min-delay", type=float, default=3.5)
+    steam.add_argument("--proxy", default=None)
+    steam.add_argument(
+        "--login-secure",
+        default=os.getenv("STEAM_LOGIN_SECURE"),
+        help="steamLoginSecure cookie (only needed for 'history')",
+    )
+    s = steam.add_subparsers(dest="cmd", required=True)
 
-    p_tmatches = sub.add_parser("team-matches", help="Team match history")
-    p_tmatches.add_argument("team_id", type=int)
-    p_tmatches.add_argument("slug")
-    _add_window(p_tmatches)
+    p = s.add_parser("price", help="Current price + 24h sold volume")
+    p.add_argument("market_hash_name")
+    p.add_argument("--appid", type=int, default=730)
+    p.add_argument("--currency", type=int, default=1)
 
-    p_player = sub.add_parser("player", help="Player stats")
-    p_player.add_argument("player_id", type=int)
-    p_player.add_argument("slug")
-    _add_window(p_player)
+    p = s.add_parser("search")
+    p.add_argument("query")
+    p.add_argument("--appid", type=int, default=730)
+    p.add_argument("--count", type=int, default=20)
+    p.add_argument("--start", type=int, default=0)
 
-    p_search = sub.add_parser("search-team", help="Resolve a team name to id+slug")
-    p_search.add_argument("name")
+    p = s.add_parser("history", help="Full per-sale history (needs cookie)")
+    p.add_argument("market_hash_name")
+    p.add_argument("--appid", type=int, default=730)
 
-    sub.add_parser("rankings", help="World ranking top 30")
-    sub.add_parser("upcoming", help="Upcoming matches")
+    esc = sources.add_parser("escharts", help="EsportsCharts.com viewership")
+    esc.add_argument("--min-delay", type=float, default=2.0)
+    esc.add_argument("--proxy", default=None)
+    e = esc.add_subparsers(dest="cmd", required=True)
 
-    p_results = sub.add_parser("results", help="Recent match results")
-    p_results.add_argument("--offset", type=int, default=0)
+    p = e.add_parser("tournaments")
+    p.add_argument("--game", default="cs2")
+    p.add_argument("--year", type=int, default=None)
 
-    args = parser.parse_args(argv)
+    p = e.add_parser("tournament")
+    p.add_argument("game")
+    p.add_argument("slug")
+
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
     logging.basicConfig(level=args.log_level)
 
-    service = HLTVService(HLTVClient(min_delay=args.min_delay, proxy=args.proxy))
+    if args.source == "hltv":
+        from hltv_parser import HLTVClient, HLTVService
+        svc = HLTVService(HLTVClient(min_delay=args.min_delay, proxy=args.proxy))
+        if args.cmd == "team":
+            return _print(svc.team_overview(args.team_id, args.slug, args.start_date, args.end_date, args.months_back))
+        if args.cmd == "team-maps":
+            return _print(svc.team_map_stats(args.team_id, args.slug, args.start_date, args.end_date, args.months_back))
+        if args.cmd == "team-matches":
+            return _print(svc.team_matches(args.team_id, args.slug, args.start_date, args.end_date, args.months_back))
+        if args.cmd == "player":
+            return _print(svc.player_stats(args.player_id, args.slug, args.start_date, args.end_date, args.months_back))
+        if args.cmd == "search-team":
+            return _print({"results": svc.find_team(args.name)})
+        if args.cmd == "rankings":
+            return _print({"rankings": svc.rankings()})
+        if args.cmd == "upcoming":
+            return _print({"matches": svc.upcoming_matches()})
+        if args.cmd == "results":
+            return _print({"results": svc.results(offset=args.offset)})
 
-    if args.cmd == "team":
-        out = service.team_overview(args.team_id, args.slug, args.start_date, args.end_date, args.months_back)
-    elif args.cmd == "team-maps":
-        out = service.team_map_stats(args.team_id, args.slug, args.start_date, args.end_date, args.months_back)
-    elif args.cmd == "team-matches":
-        out = service.team_matches(args.team_id, args.slug, args.start_date, args.end_date, args.months_back)
-    elif args.cmd == "player":
-        out = service.player_stats(args.player_id, args.slug, args.start_date, args.end_date, args.months_back)
-    elif args.cmd == "search-team":
-        out = {"results": service.find_team(args.name)}
-    elif args.cmd == "rankings":
-        out = {"rankings": service.rankings()}
-    elif args.cmd == "upcoming":
-        out = {"matches": service.upcoming_matches()}
-    elif args.cmd == "results":
-        out = {"results": service.results(offset=args.offset)}
-    else:
-        parser.error(f"unknown command {args.cmd}")
-        return 2
+    if args.source == "steam":
+        from steam_market import SteamClient, SteamMarketService
+        client = SteamClient(
+            min_delay=args.min_delay,
+            proxy=args.proxy,
+            login_secure_cookie=args.login_secure,
+        )
+        svc = SteamMarketService(client)
+        if args.cmd == "price":
+            return _print(svc.price_overview(args.market_hash_name, appid=args.appid, currency=args.currency))
+        if args.cmd == "search":
+            return _print(svc.search(args.query, appid=args.appid, count=args.count, start=args.start))
+        if args.cmd == "history":
+            return _print(svc.price_history(args.market_hash_name, appid=args.appid))
 
-    json.dump(out, sys.stdout, ensure_ascii=False, indent=2, default=str)
-    sys.stdout.write("\n")
-    return 0
+    if args.source == "escharts":
+        from escharts_parser import EsChartsClient, EsChartsService
+        svc = EsChartsService(EsChartsClient(min_delay=args.min_delay, proxy=args.proxy))
+        if args.cmd == "tournaments":
+            return _print({
+                "game": args.game,
+                "year": args.year,
+                "tournaments": svc.tournaments(game=args.game, year=args.year),
+            })
+        if args.cmd == "tournament":
+            return _print(svc.tournament(game=args.game, slug=args.slug))
+
+    print(f"unknown command: {args}", file=sys.stderr)
+    return 2
 
 
 if __name__ == "__main__":
