@@ -1,0 +1,24 @@
+# Parser-only local dev stack.
+#
+# Use this when n8n lives elsewhere (n8n Cloud, another VPS) and you
+# just want to run the scraper API on your laptop for testing.
+#
+# For the bundled n8n + parser stack, use docker-compose.full.yml.
+#
+# Run:
+#   docker compose -f docker-compose.local.yml up --build
+
+services:
+  esports-data:
+    build: .
+    image: esports-data-api:local
+    container_name: esports-data
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Match Render's port-injection behavior locally so `$PORT` is
+      # exercised the same way in dev as in prod.
+      PORT: "8000"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"

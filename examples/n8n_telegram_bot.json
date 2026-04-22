@@ -1,0 +1,378 @@
+{
+  "name": "Esports Briefing Bot",
+  "meta": {
+    "instanceId": "esports-briefing-bot-v1",
+    "description": "Telegram command bot wired to the esports-data parser API on Render. Implements /rank, /team and /compare. Exported from n8n Cloud 1.78.x (2026-04). On older n8n the Switch and Merge node typeVersions may need to be lowered (Switch 3 -> 2, Merge 3 -> 2). Anthropic calls go via raw HTTP Request to api.anthropic.com to avoid pinning to any specific Anthropic node version.\n\nRequired n8n Cloud env variables (Settings -> Variables):\n  ESPORTS_API_BASE       e.g. https://esports-data-xxxx.onrender.com\n  TELEGRAM_CHAT_ID       your numeric chat id\n  ANTHROPIC_API_KEY      sk-ant-...\n\nRequired credentials (Credentials tab):\n  Telegram        bot   - Telegram bot token from @BotFather\n  HTTP Header Auth parser-api - header name 'Authorization', value 'Bearer <API_TOKEN>'"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 400],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_TELEGRAM_CRED_ID",
+          "name": "bot"
+        }
+      },
+      "webhookId": "REPLACE_AT_IMPORT"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"},
+          "conditions": [
+            {
+              "id": "auth-check",
+              "leftValue": "={{ $json.message.chat.id }}",
+              "rightValue": "={{ $env.TELEGRAM_CHAT_ID }}",
+              "operator": {"type": "string", "operation": "equals"}
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Auth filter",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [420, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = ($input.item.json.message?.text || '').trim();\nconst m = text.match(/^\\/([a-z]+)(?:\\s+(.*))?$/i);\nif (!m) {\n  return [{ json: { command: 'help', raw_args: '', args: [], chat_id: $input.item.json.message.chat.id } }];\n}\nconst [, cmd, rest = ''] = m;\nconst args = rest.trim().split(/\\s+/).filter(Boolean);\nreturn [{\n  json: {\n    command: cmd.toLowerCase(),\n    raw_args: rest.trim(),\n    args,\n    chat_id: $input.item.json.message.chat.id,\n    user_name: $input.item.json.message.from.username || $input.item.json.message.from.first_name\n  }\n}];"
+      },
+      "id": "00000000-0000-0000-0000-000000000003",
+      "name": "Parse command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 320]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"}, "conditions": [{"id": "r-rank", "leftValue": "={{ $json.command }}", "rightValue": "rank", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "rank"},
+            {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"}, "conditions": [{"id": "r-team", "leftValue": "={{ $json.command }}", "rightValue": "team", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "team"},
+            {"conditions": {"options": {"caseSensitive": true, "leftValue": "", "typeValidation": "loose"}, "conditions": [{"id": "r-cmp", "leftValue": "={{ $json.command }}", "rightValue": "compare", "operator": {"type": "string", "operation": "equals"}}], "combinator": "and"}, "renameOutput": true, "outputKey": "compare"}
+          ]
+        },
+        "options": {"fallbackOutput": "extra", "renameFallbackOutput": "help"}
+      },
+      "id": "00000000-0000-0000-0000-000000000004",
+      "name": "Switch by command",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [860, 320]
+    },
+
+    {
+      "parameters": {
+        "url": "={{ $env.ESPORTS_API_BASE }}/hltv/rankings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {"response": {"response": {"responseFormat": "json"}}, "timeout": 60000}
+      },
+      "id": "00000000-0000-0000-0000-000000000010",
+      "name": "GET /hltv/rankings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 80],
+      "credentials": {"httpHeaderAuth": {"id": "REPLACE_PARSER_CRED_ID", "name": "parser-api"}}
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}"},
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 600,\n  \"system\": \"You are a concise CS esports analyst. Summarise the input JSON into a Telegram post: 5 bullets max, Markdown, no preamble.\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"HLTV top 30 right now:\\n{{ JSON.stringify($json.rankings.slice(0, 10)) }}\"}\n  ]\n}",
+        "options": {"timeout": 60000}
+      },
+      "id": "00000000-0000-0000-0000-000000000011",
+      "name": "Claude format (rank)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 80]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse command').item.json.chat_id }}",
+        "text": "={{ $json.content[0].text }}",
+        "additionalFields": {"parse_mode": "Markdown"}
+      },
+      "id": "00000000-0000-0000-0000-000000000012",
+      "name": "Telegram reply (rank)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1580, 80],
+      "credentials": {"telegramApi": {"id": "REPLACE_TELEGRAM_CRED_ID", "name": "bot"}}
+    },
+
+    {
+      "parameters": {
+        "url": "={{ $env.ESPORTS_API_BASE }}/hltv/team/search",
+        "sendQuery": true,
+        "queryParameters": {"parameters": [{"name": "name", "value": "={{ $json.args[0] }}"}]},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {"response": {"response": {"responseFormat": "json"}}, "timeout": 60000}
+      },
+      "id": "00000000-0000-0000-0000-000000000020",
+      "name": "GET team search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 320],
+      "credentials": {"httpHeaderAuth": {"id": "REPLACE_PARSER_CRED_ID", "name": "parser-api"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "const hits = $input.item.json.results || [];\nif (!hits.length) {\n  return [{ json: { error: `team \"${$('Parse command').item.json.args[0]}\" not found` } }];\n}\nconst pick = hits[0];\nconst monthsBack = parseInt($('Parse command').item.json.args[1] || '3', 10);\nreturn [{ json: { team_id: pick.team_id, slug: pick.slug, team_name: pick.team, months_back: monthsBack } }];"
+      },
+      "id": "00000000-0000-0000-0000-000000000021",
+      "name": "Pick team",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 320]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.ESPORTS_API_BASE }}/hltv/team/{{ $json.team_id }}/{{ $json.slug }}/overview",
+        "sendQuery": true,
+        "queryParameters": {"parameters": [{"name": "months_back", "value": "={{ $json.months_back }}"}]},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {"response": {"response": {"responseFormat": "json"}}, "timeout": 60000}
+      },
+      "id": "00000000-0000-0000-0000-000000000022",
+      "name": "GET team overview",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1460, 320],
+      "credentials": {"httpHeaderAuth": {"id": "REPLACE_PARSER_CRED_ID", "name": "parser-api"}}
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}"},
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 500,\n  \"system\": \"You are a concise CS esports analyst. Summarise the team's window snapshot into a 3-bullet Telegram post in Markdown. No preamble.\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"{{ JSON.stringify($json) }}\"}\n  ]\n}",
+        "options": {"timeout": 60000}
+      },
+      "id": "00000000-0000-0000-0000-000000000023",
+      "name": "Claude format (team)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1640, 320]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse command').item.json.chat_id }}",
+        "text": "={{ $json.content[0].text }}",
+        "additionalFields": {"parse_mode": "Markdown"}
+      },
+      "id": "00000000-0000-0000-0000-000000000024",
+      "name": "Telegram reply (team)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1820, 320],
+      "credentials": {"telegramApi": {"id": "REPLACE_TELEGRAM_CRED_ID", "name": "bot"}}
+    },
+
+    {
+      "parameters": {
+        "url": "={{ $env.ESPORTS_API_BASE }}/hltv/team/search",
+        "sendQuery": true,
+        "queryParameters": {"parameters": [{"name": "name", "value": "={{ $json.args[0] }}"}]},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {"response": {"response": {"responseFormat": "json"}}, "timeout": 60000}
+      },
+      "id": "00000000-0000-0000-0000-000000000030",
+      "name": "GET team search (compare)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 580],
+      "credentials": {"httpHeaderAuth": {"id": "REPLACE_PARSER_CRED_ID", "name": "parser-api"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "const hits = $input.item.json.results || [];\nif (!hits.length) {\n  return [{ json: { error: 'team not found' } }];\n}\nconst pick = hits[0];\nconst pivot = $('Parse command').item.json.args[1];\nif (!/^\\d{4}-\\d{2}-\\d{2}$/.test(pivot || '')) {\n  return [{ json: { error: 'usage: /compare <team> <YYYY-MM-DD>' } }];\n}\nconst d = new Date(pivot);\nconst minus3 = new Date(d); minus3.setMonth(minus3.getMonth() - 3);\nconst plus3 = new Date(d); plus3.setMonth(plus3.getMonth() + 3);\nconst iso = (x) => x.toISOString().slice(0, 10);\nreturn [{\n  json: {\n    team_id: pick.team_id,\n    slug: pick.slug,\n    team_name: pick.team,\n    pivot,\n    before_start: iso(minus3),\n    before_end: iso(new Date(d.getTime() - 86400000)),\n    after_start: iso(d),\n    after_end: iso(plus3)\n  }\n}];"
+      },
+      "id": "00000000-0000-0000-0000-000000000031",
+      "name": "Build windows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 580]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.ESPORTS_API_BASE }}/hltv/team/{{ $json.team_id }}/{{ $json.slug }}/maps",
+        "sendQuery": true,
+        "queryParameters": {"parameters": [
+          {"name": "start_date", "value": "={{ $json.before_start }}"},
+          {"name": "end_date", "value": "={{ $json.before_end }}"}
+        ]},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {"response": {"response": {"responseFormat": "json"}}, "timeout": 90000}
+      },
+      "id": "00000000-0000-0000-0000-000000000032",
+      "name": "Pull BEFORE",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1460, 500],
+      "credentials": {"httpHeaderAuth": {"id": "REPLACE_PARSER_CRED_ID", "name": "parser-api"}}
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.ESPORTS_API_BASE }}/hltv/team/{{ $('Build windows').item.json.team_id }}/{{ $('Build windows').item.json.slug }}/maps",
+        "sendQuery": true,
+        "queryParameters": {"parameters": [
+          {"name": "start_date", "value": "={{ $('Build windows').item.json.after_start }}"},
+          {"name": "end_date", "value": "={{ $('Build windows').item.json.after_end }}"}
+        ]},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {"response": {"response": {"responseFormat": "json"}}, "timeout": 90000}
+      },
+      "id": "00000000-0000-0000-0000-000000000033",
+      "name": "Pull AFTER",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1460, 660],
+      "credentials": {"httpHeaderAuth": {"id": "REPLACE_PARSER_CRED_ID", "name": "parser-api"}}
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "x-api-key", "value": "={{ $env.ANTHROPIC_API_KEY }}"},
+            {"name": "anthropic-version", "value": "2023-06-01"},
+            {"name": "content-type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-6\",\n  \"max_tokens\": 800,\n  \"system\": \"You are a concise CS esports analyst. Given two HLTV per-map snapshots for the same team, compute the deltas and write a 4-bullet Telegram post in Markdown. Bullets: overall winrate delta, biggest CT-side delta with map name, biggest T-side delta with map name, one content angle. No preamble.\",\n  \"messages\": [\n    {\"role\": \"user\", \"content\": \"Team: {{ $('Build windows').item.json.team_name }}\\nPivot: {{ $('Build windows').item.json.pivot }}\\nBEFORE ({{ $('Build windows').item.json.before_start }} to {{ $('Build windows').item.json.before_end }}): {{ JSON.stringify($('Pull BEFORE').item.json) }}\\nAFTER ({{ $('Build windows').item.json.after_start }} to {{ $('Build windows').item.json.after_end }}): {{ JSON.stringify($('Pull AFTER').item.json) }}\"}\n  ]\n}",
+        "options": {"timeout": 90000}
+      },
+      "id": "00000000-0000-0000-0000-000000000034",
+      "name": "Claude format (compare)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1700, 580]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse command').item.json.chat_id }}",
+        "text": "={{ $json.content[0].text }}",
+        "additionalFields": {"parse_mode": "Markdown"}
+      },
+      "id": "00000000-0000-0000-0000-000000000035",
+      "name": "Telegram reply (compare)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1900, 580],
+      "credentials": {"telegramApi": {"id": "REPLACE_TELEGRAM_CRED_ID", "name": "bot"}}
+    },
+
+    {
+      "parameters": {
+        "chatId": "={{ $('Parse command').item.json.chat_id }}",
+        "text": "Commands:\n/rank\n/team <name> [months_back]\n/compare <team> <YYYY-MM-DD>",
+        "additionalFields": {}
+      },
+      "id": "00000000-0000-0000-0000-000000000040",
+      "name": "Telegram help",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 880],
+      "credentials": {"telegramApi": {"id": "REPLACE_TELEGRAM_CRED_ID", "name": "bot"}}
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [[{"node": "Auth filter", "type": "main", "index": 0}]]
+    },
+    "Auth filter": {
+      "main": [
+        [{"node": "Parse command", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "Parse command": {
+      "main": [[{"node": "Switch by command", "type": "main", "index": 0}]]
+    },
+    "Switch by command": {
+      "main": [
+        [{"node": "GET /hltv/rankings", "type": "main", "index": 0}],
+        [{"node": "GET team search", "type": "main", "index": 0}],
+        [{"node": "GET team search (compare)", "type": "main", "index": 0}],
+        [{"node": "Telegram help", "type": "main", "index": 0}]
+      ]
+    },
+    "GET /hltv/rankings": {
+      "main": [[{"node": "Claude format (rank)", "type": "main", "index": 0}]]
+    },
+    "Claude format (rank)": {
+      "main": [[{"node": "Telegram reply (rank)", "type": "main", "index": 0}]]
+    },
+    "GET team search": {
+      "main": [[{"node": "Pick team", "type": "main", "index": 0}]]
+    },
+    "Pick team": {
+      "main": [[{"node": "GET team overview", "type": "main", "index": 0}]]
+    },
+    "GET team overview": {
+      "main": [[{"node": "Claude format (team)", "type": "main", "index": 0}]]
+    },
+    "Claude format (team)": {
+      "main": [[{"node": "Telegram reply (team)", "type": "main", "index": 0}]]
+    },
+    "GET team search (compare)": {
+      "main": [[{"node": "Build windows", "type": "main", "index": 0}]]
+    },
+    "Build windows": {
+      "main": [[
+        {"node": "Pull BEFORE", "type": "main", "index": 0},
+        {"node": "Pull AFTER", "type": "main", "index": 0}
+      ]]
+    },
+    "Pull AFTER": {
+      "main": [[{"node": "Claude format (compare)", "type": "main", "index": 0}]]
+    },
+    "Claude format (compare)": {
+      "main": [[{"node": "Telegram reply (compare)", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "versionId": "1"
+}

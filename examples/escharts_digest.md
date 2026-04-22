@@ -10,7 +10,7 @@ post, built on the public tournament leaderboard.
         │
         ▼
 [HTTP > GET /escharts/tournaments?game=cs2]
-   URL:     http://esports-data:8000/escharts/tournaments
+   URL:     {{ $env.ESPORTS_API_BASE }}/escharts/tournaments
    Query:   game = cs2
    Headers: Authorization = Bearer {{$env.ESPORTS_API_TOKEN}}
         │

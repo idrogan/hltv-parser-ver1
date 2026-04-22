@@ -17,7 +17,7 @@ a logged-in `steamLoginSecure` cookie.
         │
         ▼
 [HTTP Request > GET /steam/price]
-   URL:     http://esports-data:8000/steam/price
+   URL:     {{ $env.ESPORTS_API_BASE }}/steam/price
    Query:   market_hash_name = {{$json.market_hash_name}}
             appid            = 730
             currency         = 1
@@ -37,7 +37,7 @@ a logged-in `steamLoginSecure` cookie.
 Or do all items in one HTTP call:
 
 ```
-POST http://esports-data:8000/steam/price/bulk
+POST {{ $env.ESPORTS_API_BASE }}/steam/price/bulk
 Content-Type: application/json
 Authorization: Bearer ...
 

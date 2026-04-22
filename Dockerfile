@@ -2,7 +2,8 @@ FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PORT=8000
 
 WORKDIR /app
 
@@ -19,9 +20,13 @@ COPY steam_market ./steam_market
 COPY escharts_parser ./escharts_parser
 COPY app.py cli.py ./
 
+# EXPOSE is informational; Render ignores it and uses $PORT.
 EXPOSE 8000
 
+# Local docker-compose health check. Render ignores Docker HEALTHCHECK and
+# uses healthCheckPath from render.yaml instead.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-    CMD curl -fsS http://127.0.0.1:8000/health || exit 1
+    CMD curl -fsS "http://127.0.0.1:${PORT}/health" || exit 1
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form so $PORT expands. Render injects PORT; locally we default to 8000.
+CMD exec uvicorn app:app --host 0.0.0.0 --port "${PORT}"

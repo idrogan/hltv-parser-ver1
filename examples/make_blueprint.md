@@ -9,7 +9,7 @@ ChatGPT, Buffer, etc).
         │
         ▼
 [HTTP > Make a request]
-   URL:    http://YOUR_HOST:8000/hltv/team/4608/natus-vincere/maps
+   URL:    https://esports-data-xxxx.onrender.com/hltv/team/4608/natus-vincere/maps
    Method: GET
    Query string:
      months_back = 5

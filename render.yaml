@@ -1,0 +1,67 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# To deploy:
+#   1. Push this repo to your own GitHub
+#   2. Render dashboard → New → Blueprint → connect repo
+#   3. Render reads this file and provisions the service
+#   4. Fill in the secrets it prompts for (any var with sync: false)
+#
+# After first deploy, copy the public URL (e.g.
+# https://esports-data-xxxx.onrender.com) into your n8n Cloud env as
+# ESPORTS_API_BASE.
+
+services:
+  - type: web
+    name: esports-data
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free            # bump to 'starter' to remove the 15-min idle spin-down
+    region: frankfurt     # change to oregon / singapore / ohio etc. as needed
+    healthCheckPath: /health
+    autoDeploy: true      # redeploy on push to the connected branch
+
+    envVars:
+      # Bearer token guarding every non-meta route. Render generates a
+      # random value on first deploy; rotate by changing it here.
+      - key: API_TOKEN
+        generateValue: true
+
+      # Refuse to boot if API_TOKEN is empty. Always true on Render.
+      - key: API_REQUIRE_TOKEN
+        value: "true"
+
+      - key: LOG_LEVEL
+        value: INFO
+
+      # Per-IP request budget (slowapi). 60/min handles cron + interactive
+      # bot use comfortably; raise if you start fanning out heavy bulk pulls.
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "60"
+
+      # Lock CORS to your n8n Cloud subdomain in production, e.g.
+      # https://your-tenant.app.n8n.cloud
+      - key: ALLOWED_ORIGIN
+        value: "*"
+
+      # Polite throttles for upstream scraping. Lower = faster but more
+      # likely to trip Cloudflare / Valve rate-limits.
+      - key: HLTV_MIN_DELAY
+        value: "2.0"
+      - key: STEAM_MIN_DELAY
+        value: "3.5"
+      - key: ESCHARTS_MIN_DELAY
+        value: "2.0"
+
+      # Optional outbound proxies (residential rotation). Leave blank to
+      # use Render's egress IP.
+      - key: HLTV_PROXY
+        sync: false
+      - key: STEAM_PROXY
+        sync: false
+      - key: ESCHARTS_PROXY
+        sync: false
+
+      # Optional: unlocks /steam/history (full per-sale history). Grab the
+      # cookie value from your browser; treat it as a secret.
+      - key: STEAM_LOGIN_SECURE
+        sync: false

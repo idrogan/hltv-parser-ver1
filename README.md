@@ -2,8 +2,12 @@
 
 Self-hosted JSON API for an esports content-strategy pipeline. Scrapes
 **HLTV.org**, **Steam Community Market** and **EsportsCharts.com**,
-returns clean JSON, and is designed to sit at **Layer 1** of a
-Make / n8n → Supabase → Claude → Telegram automation.
+returns clean JSON, and is designed to sit at **Layer 1** of an
+n8n Cloud → Supabase → Claude → Telegram automation.
+
+Primary deployment target is **Render.com** for the parser API +
+**n8n Cloud** for orchestration. Local dev still works through
+docker-compose.
 
 ## What you can pull
 
@@ -29,14 +33,7 @@ All time-windowed endpoints accept: `start_date=YYYY-MM-DD` & `end_date=YYYY-MM-
 | `GET /steam/search?query=...`           | Browse items + listing counts |
 | `GET /steam/history?market_hash_name=...` | Full lifetime per-sale history (requires `STEAM_LOGIN_SECURE` cookie) |
 
-**Yes — units sold is available.** The 24-hour volume comes back on every
-`/steam/price` call without auth. For multi-year historical volume, log
-`/steam/price` daily to Postgres and you build history yourself, or
-drop a `steamLoginSecure` cookie into `.env` to unlock the full
-`/steam/history` endpoint in one shot.
-
-`appid` defaults to `730` (CS2). Use `currency=1` (USD), `3` (EUR),
-`5` (RUB), etc.
+`appid` defaults to `730` (CS2). Use `currency=1` (USD), `3` (EUR), `5` (RUB), etc.
 
 ### EsportsCharts  — `/escharts/*`
 | Endpoint | Purpose |
@@ -44,21 +41,59 @@ drop a `steamLoginSecure` cookie into `.env` to unlock the full
 | `GET /escharts/tournaments?game=cs2&year=2025` | Tournament leaderboard — peak/avg viewers, hours watched, airtime |
 | `GET /escharts/tournament/{game}/{slug}`       | Single-tournament detail incl. per-channel breakdown |
 
-Games observed in the wild: `cs2`, `csgo`, `dota2`, `lol`, `valorant`,
-`pubg`. EsportsCharts also sells a paid API — worth it if you scale
-past personal use.
+### Meta endpoints (always public, no auth)
 
-## Run it
+| Endpoint | Purpose |
+|---|---|
+| `GET /health`  | Liveness probe used by Render's health check |
+| `GET /warmup`  | Cheap wake-up call for cold containers — see *Cold-start handling* below |
 
-### Docker (recommended)
+---
+
+## Deployment
+
+### Option A — Render (primary)
+
+1. Fork or push this repo to your own GitHub.
+2. Render dashboard → **New → Blueprint** → connect the repo. Render
+   reads `render.yaml` automatically and provisions a Docker web service.
+3. Render generates a strong `API_TOKEN` for you on first deploy
+   (`generateValue: true` in the blueprint). Copy it from the service's
+   **Environment** tab — you will paste it into n8n.
+4. After the first build, note the public URL — typically
+   `https://esports-data-xxxx.onrender.com`.
+5. Smoke-test:
+   ```bash
+   curl https://esports-data-xxxx.onrender.com/health
+   # → {"ok":true,"sources":["hltv","steam","escharts"]}
+
+   curl -H "Authorization: Bearer <API_TOKEN>" \
+        https://esports-data-xxxx.onrender.com/hltv/rankings
+   ```
+
+The full step-by-step is in [`DEPLOY.md`](DEPLOY.md).
+
+#### Cold-start handling (Free tier only)
+
+Render Free containers spin down after ~15 min idle and take 30–60s
+to cold-boot the next request. The repo ships a `/warmup` endpoint
+exactly for this: in any latency-sensitive workflow (morning digest,
+interactive Telegram bot), call `/warmup` first, wait ~30–45s in an
+n8n **Wait** node, then issue the real requests. Pattern is documented
+in [`DEPLOY.md`](DEPLOY.md#cold-start-warmup-pattern). Upgrading to
+**Starter** ($7/mo) removes the cool-down entirely.
+
+### Option B — Local development
+
+Parser-only, against `n8n Cloud` or any external orchestrator:
 
 ```bash
-cp .env.example .env       # set API_TOKEN + optional STEAM_LOGIN_SECURE
-docker compose up -d --build
+cp .env.example .env       # set API_TOKEN
+docker compose -f docker-compose.local.yml up --build
 curl http://localhost:8000/health
 ```
 
-### Local Python
+Plain Python:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -66,96 +101,112 @@ pip install -r requirements.txt
 uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
-### CLI (for cron + n8n "Execute Command")
+### Option C — Self-hosted parser + self-hosted n8n on a single VPS
+
+The original `docker-compose.full.yml` still works for users who want
+both services on one box behind their own reverse proxy. See git
+history of this README for the original walkthrough; nothing in
+the parser has changed shape.
+
+---
+
+## n8n Cloud integration
+
+### Set environment variables in n8n Cloud
+
+n8n Cloud → **Settings → Variables**:
+
+| Variable | Value |
+|---|---|
+| `ESPORTS_API_BASE` | `https://esports-data-xxxx.onrender.com` (your Render URL) |
+| `TELEGRAM_CHAT_ID` | Your numeric chat id (from `/getUpdates`) |
+| `ANTHROPIC_API_KEY`| Your Anthropic key |
+
+### Add credentials in n8n Cloud
+
+n8n Cloud → **Credentials**:
+
+1. **HTTP Header Auth** — name `parser-api`. Header name `Authorization`,
+   header value `Bearer <your Render API_TOKEN>`. This is the credential
+   every HTTP Request node attaches when calling the parser.
+2. **Telegram** — name `bot`. Bot token from @BotFather.
+3. *(Optional)* Supabase, OpenAI/Anthropic node credentials, etc.
+
+### Calling the API from a workflow
+
+Every HTTP Request node points at:
+
+```
+{{ $env.ESPORTS_API_BASE }}/hltv/rankings
+{{ $env.ESPORTS_API_BASE }}/hltv/team/4608/natus-vincere/maps?months_back=5
+{{ $env.ESPORTS_API_BASE }}/steam/price?market_hash_name=...
+```
+
+Authentication: pick **Generic Credential Type → HTTP Header Auth →
+parser-api**.
+
+A ready-to-import workflow is in
+[`examples/n8n_telegram_bot.json`](examples/n8n_telegram_bot.json).
+It implements `/rank`, `/team` and `/compare`. n8n Cloud → **Workflows
+→ Import from File** → activate → message your bot.
+
+Smaller pattern docs:
+- [`examples/make_blueprint.md`](examples/make_blueprint.md) — Make.com walkthrough
+- [`examples/steam_tracker.md`](examples/steam_tracker.md) — daily sticker price/volume → Supabase
+- [`examples/escharts_digest.md`](examples/escharts_digest.md) — weekly viewership digest
+- [`examples/supabase_schema.sql`](examples/supabase_schema.sql) — DDL for every table the workflows write to
+
+---
+
+## Security notes for public deployment
+
+The parser is hardened for the open internet:
+
+- **Bearer token** required on every `/hltv/*`, `/steam/*`, `/escharts/*`
+  route. Constant-time comparison; missing-vs-wrong returns identical 401.
+- **Fail-fast misconfig**: when `API_REQUIRE_TOKEN=true` (the default in
+  `render.yaml`) the app refuses to boot with an empty `API_TOKEN`. The
+  build crashes loudly rather than silently exposing every scraper.
+- **Per-IP rate limit** via `slowapi` — default 60 req/min/IP, configurable
+  via `RATE_LIMIT_PER_MINUTE`. Real client IP is read from
+  `X-Forwarded-For` (set by Render's edge), not the proxy hop.
+- **CORS** — defaults to `*` for flexibility but should be locked to your
+  n8n Cloud origin (`https://your-tenant.app.n8n.cloud`) via
+  `ALLOWED_ORIGIN`.
+- **Access log** — every request logged with method, path, IP, status,
+  duration. The `Authorization` header value is **never** logged.
+
+---
+
+## Running tests
 
 ```bash
-python cli.py hltv team-maps 4608 natus-vincere --months-back 5
-python cli.py hltv team 7532 big --start 2023-07-01 --end 2023-09-30
-
-python cli.py steam price "Sticker | Titan (Holo) | Katowice 2014"
-python cli.py steam search "Katowice 2014 Holo" --count 30
-python cli.py steam history "AK-47 | Redline (Field-Tested)"
-
-python cli.py escharts tournaments --game cs2 --year 2025
-python cli.py escharts tournament cs2 iem-katowice-2024
+pip install -r requirements-dev.txt
+pytest -v
 ```
 
-Every command prints a single JSON document to stdout.
+Covered: bearer auth (200 / 401 / startup fail-fast), rate-limit 429
+on burst, X-Forwarded-For-aware bucketing. Tests use FastAPI's ASGI
+transport so they hit no real network.
 
-## Where this sits in your pipeline
-
-```
-┌──────────────────────── Layer 1: this API ─────────────────────────┐
-│  /hltv/*       /steam/*        /escharts/*                         │
-└─────────────────────────────┬──────────────────────────────────────┘
-                              │  (HTTP Request node, 09:00 daily)
-                              ▼
-                  ┌──────────────────────┐
-                  │  Layer 2: n8n        │
-                  └──────────┬───────────┘
-                             │
-           ┌─────────────────┼─────────────────┐
-           ▼                 ▼                 ▼
-     Supabase (L3)    Claude API (L4)    Deduper / logic
-                             │
-                             ▼
-                 ┌─────────────────────┐
-                 │  Layer 5: Telegram  │
-                 │  Layer 6: X autopost│
-                 └─────────────────────┘
-```
-
-## n8n & Make wiring
-
-Both apps use plain HTTP Request nodes:
-
-- **URL** — `http://esports-data:8000/hltv/team/4608/natus-vincere/maps`
-  (use the docker-compose service name, or `host.docker.internal` from
-  desktop n8n)
-- **Query** — `months_back=5` for HLTV; `market_hash_name=...` for Steam
-- **Header** — `Authorization: Bearer {{$env.ESPORTS_API_TOKEN}}`
-
-Reference inside downstream nodes:
-
-- HLTV CT winrate:  `$json.overall_ct_round_win_percent`
-- Steam 24h volume: `$json.volume_24h`
-- EsC peak viewers: `$json.tournaments[0].peak_viewers`
-
-Starter workflows are in [`examples/`](examples/):
-- [`n8n_workflow.json`](examples/n8n_workflow.json) — HLTV CT-winrate digest
-- [`make_blueprint.md`](examples/make_blueprint.md) — Make.com walkthrough
-- [`steam_tracker.md`](examples/steam_tracker.md) — daily sticker price/volume → Supabase
-- [`escharts_digest.md`](examples/escharts_digest.md) — weekly viewership leaderboard
-
-## Auth
-
-Set `API_TOKEN` in `.env` to require `Authorization: Bearer <token>`
-on every request. Leave it empty only on a trusted private network.
-
-## Rate-limit defaults
-
-| Source         | Default throttle | Why |
-|----------------|-----------------|-----|
-| HLTV           | 2.0 s / request | Cloudflare + WAF, sub-1.5s gets banned |
-| Steam          | 3.5 s / request | Valve 429s past ~20 req/min |
-| EsportsCharts  | 2.0 s / request | Cloudflare, polite defaults |
-
-Override per source via `HLTV_MIN_DELAY`, `STEAM_MIN_DELAY`,
-`ESCHARTS_MIN_DELAY`. On heavy cron load, plug a residential proxy
-into the matching `*_PROXY` env var.
+---
 
 ## Project layout
 
 ```
 app.py                    # FastAPI entry — mounts all three routers
-cli.py                    # Multi-source CLI
-common/                   # Shared bearer-auth dependency
+cli.py                    # Multi-source CLI (cron / "Execute Command" friendly)
+common/                   # Shared bearer-auth + rate-limit/access-log middleware
 hltv_parser/              # HLTV client + parsers + /hltv router
 steam_market/             # Steam Market client + /steam router
 escharts_parser/          # EsportsCharts client + parsers + /escharts router
-Dockerfile
-docker-compose.yml
-examples/                 # n8n workflow JSON + Make/Steam/EsC guides
+tests/                    # pytest suite (auth, rate-limit, real-IP)
+render.yaml               # Render Blueprint
+Dockerfile                # Honors $PORT, falls back to 8000 locally
+docker-compose.local.yml  # Parser only, for local dev
+docker-compose.full.yml   # Parser + n8n on the same network (single-VPS)
+DEPLOY.md                 # Top-to-bottom deploy checklist
+examples/                 # n8n workflow JSON + Make/Steam/EsC pattern docs + Supabase DDL
 ```
 
 ## Notes & limitations
@@ -164,8 +215,7 @@ examples/                 # n8n workflow JSON + Make/Steam/EsC guides
   degrade to `null` fields rather than crashing — if a metric goes
   dark, open the matching `parsers.py` and update the CSS selector.
 - **Steam Market** endpoints are public but undocumented. `priceoverview`
-  and `search/render` have been stable for years; `pricehistory`
-  requires a `steamLoginSecure` cookie and can rotate without warning.
-- Scraping may violate HLTV/EsportsCharts ToS for commercial use.
-  Throttle responsibly, buy the EsC paid API when you go pro, and
-  consider HLTV's partner program.
+  and `search/render` have been stable for years; `pricehistory` requires
+  a `steamLoginSecure` cookie and can rotate.
+- Scraping may violate HLTV / EsportsCharts ToS for commercial use.
+  Throttle responsibly. EsC sells a paid API once you grow.
