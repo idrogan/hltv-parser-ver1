@@ -1,0 +1,46 @@
+services:
+  esports-data:
+    build: .
+    image: esports-data-api:latest
+    container_name: esports-data
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    networks: [esports]
+    # No external port — only n8n (same network) needs to reach it.
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      N8N_SECURE_COOKIE: "false"
+      GENERIC_TIMEZONE: ${TIMEZONE:-Europe/Warsaw}
+      TZ: ${TIMEZONE:-Europe/Warsaw}
+      # Tokens below are injected into workflows via {{$env.*}}
+      ESPORTS_API_BASE: http://esports-data:8000
+      ESPORTS_API_TOKEN: ${API_TOKEN}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_SERVICE_ROLE: ${SUPABASE_SERVICE_ROLE:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - esports-data
+    networks: [esports]
+
+networks:
+  esports:
+    driver: bridge
+
+volumes:
+  n8n_data:
