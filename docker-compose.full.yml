@@ -24,6 +24,8 @@ services:
       N8N_SECURE_COOKIE: "false"
       GENERIC_TIMEZONE: ${TIMEZONE:-Europe/Warsaw}
       TZ: ${TIMEZONE:-Europe/Warsaw}
+      # Allow workflows to read process env via {{$env.*}}; default in n8n is to block it.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       # Tokens below are injected into workflows via {{$env.*}}
       ESPORTS_API_BASE: http://esports-data:8000
       ESPORTS_API_TOKEN: ${API_TOKEN}
