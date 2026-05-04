@@ -29,8 +29,22 @@ log = logging.getLogger(__name__)
 class HLTVService:
     def __init__(self, client: Optional[HLTVClient] = None):
         self.client = client or HLTVClient()
+        self._warmed_teams: set[int] = set()
 
     # ---------------- teams ----------------
+    def _team_referer(self, team_id: int, team_slug: str) -> str:
+        # HLTV's WAF rejects direct hits on /stats/teams/... — visit the
+        # team profile first so CF cookies + a realistic Referer are set,
+        # mimicking the navigation a real user would take from search.
+        profile_path = f"/team/{team_id}/{team_slug}"
+        if team_id not in self._warmed_teams:
+            try:
+                self.client.get(profile_path)
+                self._warmed_teams.add(team_id)
+            except Exception:
+                pass
+        return f"https://www.hltv.org{profile_path}"
+
     def team_overview(
         self,
         team_id: int,
@@ -40,8 +54,9 @@ class HLTVService:
         months_back: Optional[int] = None,
     ) -> dict:
         s, e = normalise_date_range(start_date, end_date, months_back)
+        ref = self._team_referer(team_id, team_slug)
         path = f"/stats/teams/{team_id}/{team_slug}"
-        html = self.client.get(path, params={"startDate": s, "endDate": e})
+        html = self.client.get(path, params={"startDate": s, "endDate": e}, referer=ref)
         data = parse_team_overview(html)
         data["team_id"] = team_id
         data["slug"] = team_slug
@@ -62,8 +77,9 @@ class HLTVService:
         use-case from the user's brief.
         """
         s, e = normalise_date_range(start_date, end_date, months_back)
+        ref = self._team_referer(team_id, team_slug)
         path = f"/stats/teams/maps/{team_id}/{team_slug}"
-        html = self.client.get(path, params={"startDate": s, "endDate": e})
+        html = self.client.get(path, params={"startDate": s, "endDate": e}, referer=ref)
         data = parse_team_map_stats(html)
         data["team_id"] = team_id
         data["slug"] = team_slug
@@ -79,8 +95,9 @@ class HLTVService:
         months_back: Optional[int] = None,
     ) -> dict:
         s, e = normalise_date_range(start_date, end_date, months_back)
+        ref = self._team_referer(team_id, team_slug)
         path = f"/stats/teams/matches/{team_id}/{team_slug}"
-        html = self.client.get(path, params={"startDate": s, "endDate": e})
+        html = self.client.get(path, params={"startDate": s, "endDate": e}, referer=ref)
         return {
             "team_id": team_id,
             "slug": team_slug,
