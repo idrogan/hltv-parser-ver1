@@ -17,6 +17,8 @@ PROXY = os.getenv("HLTV_PROXY") or None
 FLARESOLVERR_URL = os.getenv("HLTV_FLARESOLVERR_URL") or None
 PROXY_INSECURE = (os.getenv("HLTV_PROXY_INSECURE", "false").lower()
                   in ("1", "true", "yes"))
+BRIGHTDATA_API_KEY = os.getenv("HLTV_BRIGHTDATA_API_KEY") or None
+BRIGHTDATA_ZONE = os.getenv("HLTV_BRIGHTDATA_ZONE") or None
 
 router = APIRouter(prefix="/hltv", tags=["hltv"])
 _service = HLTVService(
@@ -25,6 +27,8 @@ _service = HLTVService(
         proxy=PROXY,
         flaresolverr_url=FLARESOLVERR_URL,
         proxy_insecure=PROXY_INSECURE,
+        brightdata_api_key=BRIGHTDATA_API_KEY,
+        brightdata_zone=BRIGHTDATA_ZONE,
     )
 )
 

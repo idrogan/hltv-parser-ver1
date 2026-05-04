@@ -72,6 +72,8 @@ class HLTVClient:
         proxy: Optional[str] = None,
         flaresolverr_url: Optional[str] = None,
         proxy_insecure: bool = False,
+        brightdata_api_key: Optional[str] = None,
+        brightdata_zone: Optional[str] = None,
     ):
         self.min_delay = min_delay
         self.timeout = timeout
@@ -79,9 +81,19 @@ class HLTVClient:
         self.proxy = proxy
         self.flaresolverr_url = flaresolverr_url.rstrip("/") if flaresolverr_url else None
         self.proxy_insecure = proxy_insecure
+        self.brightdata_api_key = brightdata_api_key or None
+        self.brightdata_zone = brightdata_zone or None
         self._last_request_at = 0.0
         self._lock = threading.Lock()
         self._session = cffi_requests.Session()
+
+    @property
+    def uses_smart_proxy(self) -> bool:
+        # Smart proxies (Bright Data Web Unlocker, FlareSolverr) handle CF
+        # internally and don't benefit from per-team profile warming.
+        return bool(self.brightdata_api_key and self.brightdata_zone) or bool(
+            self.flaresolverr_url
+        )
 
     def _throttle(self) -> None:
         with self._lock:
@@ -111,6 +123,44 @@ class HLTVClient:
         if referer:
             h["Referer"] = referer
         return h
+
+    def _fetch_via_brightdata(
+        self, url: str, params: Optional[dict]
+    ) -> tuple[int, str]:
+        from urllib.parse import urlencode
+
+        full_url = url
+        if params:
+            sep = "&" if "?" in url else "?"
+            full_url = f"{url}{sep}{urlencode(params)}"
+        payload = {
+            "zone": self.brightdata_zone,
+            "url": full_url,
+            "format": "raw",
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.brightdata_api_key}",
+        }
+        try:
+            resp = cffi_requests.post(
+                "https://api.brightdata.com/request",
+                json=payload,
+                headers=headers,
+                timeout=self.timeout + 60,
+            )
+        except Exception as exc:
+            raise HLTVBlockedError(f"brightdata API unreachable: {exc}") from exc
+        if resp.status_code != 200:
+            raise HLTVBlockedError(
+                f"brightdata API returned {resp.status_code}: {resp.text[:200]}"
+            )
+        target_status_header = resp.headers.get("x-brd-status-code")
+        try:
+            target_status = int(target_status_header) if target_status_header else 200
+        except ValueError:
+            target_status = 200
+        return target_status, resp.text
 
     def _fetch_via_flaresolverr(
         self, url: str, params: Optional[dict]
@@ -185,7 +235,9 @@ class HLTVClient:
         self._throttle()
         log.debug("GET %s params=%s flaresolverr=%s", url, params, bool(self.flaresolverr_url))
 
-        if self.flaresolverr_url:
+        if self.brightdata_api_key and self.brightdata_zone:
+            status, body = self._fetch_via_brightdata(url, params)
+        elif self.flaresolverr_url:
             status, body = self._fetch_via_flaresolverr(url, params)
         else:
             status, body = self._fetch_direct(url, params, referer)

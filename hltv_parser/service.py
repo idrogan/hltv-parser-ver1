@@ -36,8 +36,13 @@ class HLTVService:
         # HLTV's WAF rejects direct hits on /stats/teams/... — visit the
         # team profile first so CF cookies + a realistic Referer are set,
         # mimicking the navigation a real user would take from search.
+        # Smart proxies (Bright Data) handle CF per-request internally,
+        # so warming is skipped to avoid doubling billed traffic.
         profile_path = f"/team/{team_id}/{team_slug}"
-        if team_id not in self._warmed_teams:
+        if (
+            not self.client.uses_smart_proxy
+            and team_id not in self._warmed_teams
+        ):
             try:
                 self.client.get(profile_path)
                 self._warmed_teams.add(team_id)
