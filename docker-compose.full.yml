@@ -7,8 +7,20 @@ services:
     env_file: .env
     environment:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      HLTV_FLARESOLVERR_URL: http://flaresolverr:8191
+    depends_on:
+      - flaresolverr
     networks: [esports]
     # No external port — only n8n (same network) needs to reach it.
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    restart: unless-stopped
+    environment:
+      LOG_LEVEL: info
+      TZ: ${TIMEZONE:-Europe/Warsaw}
+    networks: [esports]
 
   n8n:
     image: docker.n8n.io/n8nio/n8n:latest

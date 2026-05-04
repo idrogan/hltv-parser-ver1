@@ -70,11 +70,13 @@ class HLTVClient:
         timeout: int = 30,
         impersonate: str = "chrome124",
         proxy: Optional[str] = None,
+        flaresolverr_url: Optional[str] = None,
     ):
         self.min_delay = min_delay
         self.timeout = timeout
         self.impersonate = impersonate
         self.proxy = proxy
+        self.flaresolverr_url = flaresolverr_url.rstrip("/") if flaresolverr_url else None
         self._last_request_at = 0.0
         self._lock = threading.Lock()
         self._session = cffi_requests.Session()
@@ -108,6 +110,60 @@ class HLTVClient:
             h["Referer"] = referer
         return h
 
+    def _fetch_via_flaresolverr(
+        self, url: str, params: Optional[dict]
+    ) -> tuple[int, str]:
+        from urllib.parse import urlencode
+
+        full_url = url
+        if params:
+            sep = "&" if "?" in url else "?"
+            full_url = f"{url}{sep}{urlencode(params)}"
+        payload = {
+            "cmd": "request.get",
+            "url": full_url,
+            "maxTimeout": 60000,
+        }
+        try:
+            resp = cffi_requests.post(
+                f"{self.flaresolverr_url}/v1",
+                json=payload,
+                timeout=self.timeout + 60,
+            )
+        except Exception as exc:
+            raise HLTVBlockedError(f"flaresolverr unreachable: {exc}") from exc
+        if resp.status_code != 200:
+            raise HLTVBlockedError(
+                f"flaresolverr returned {resp.status_code}"
+            )
+        data = resp.json()
+        if data.get("status") != "ok":
+            raise HLTVBlockedError(
+                f"flaresolverr: {data.get('message') or 'unknown error'}"
+            )
+        sol = data.get("solution") or {}
+        return int(sol.get("status") or 0), sol.get("response") or ""
+
+    def _fetch_direct(
+        self,
+        url: str,
+        params: Optional[dict],
+        referer: Optional[str],
+    ) -> tuple[int, str]:
+        proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
+        try:
+            resp = self._session.get(
+                url,
+                params=params,
+                headers=self._headers(referer=referer),
+                timeout=self.timeout,
+                impersonate=self.impersonate,
+                proxies=proxies,
+            )
+        except Exception as exc:
+            raise HLTVBlockedError(f"network error: {exc}") from exc
+        return resp.status_code, resp.text
+
     @retry(
         reraise=True,
         retry=retry_if_exception_type(HLTVBlockedError),
@@ -123,31 +179,19 @@ class HLTVClient:
         """GET ``path`` (relative or absolute) and return raw HTML."""
         url = path if path.startswith("http") else urljoin(BASE_URL, path)
         self._throttle()
-        log.debug("GET %s params=%s", url, params)
+        log.debug("GET %s params=%s flaresolverr=%s", url, params, bool(self.flaresolverr_url))
 
-        proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
-        try:
-            resp = self._session.get(
-                url,
-                params=params,
-                headers=self._headers(referer=referer),
-                timeout=self.timeout,
-                impersonate=self.impersonate,
-                proxies=proxies,
-            )
-        except Exception as exc:
-            raise HLTVBlockedError(f"network error: {exc}") from exc
+        if self.flaresolverr_url:
+            status, body = self._fetch_via_flaresolverr(url, params)
+        else:
+            status, body = self._fetch_direct(url, params, referer)
 
-        if resp.status_code in (403, 429, 503):
-            raise HLTVBlockedError(
-                f"HLTV blocked request: status={resp.status_code}"
-            )
-        if resp.status_code >= 500:
-            raise HLTVBlockedError(f"upstream {resp.status_code}")
-        if resp.status_code != 200:
-            raise HLTVError(f"unexpected status {resp.status_code} for {url}")
-
-        body = resp.text
+        if status in (403, 429, 503):
+            raise HLTVBlockedError(f"HLTV blocked request: status={status}")
+        if status >= 500:
+            raise HLTVBlockedError(f"upstream {status}")
+        if status != 200:
+            raise HLTVError(f"unexpected status {status} for {url}")
         if "Just a moment..." in body or "cf-browser-verification" in body:
             raise HLTVBlockedError("Cloudflare challenge page returned")
         return body
