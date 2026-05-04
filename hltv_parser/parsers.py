@@ -7,6 +7,7 @@ to JSON for N8N or Make.
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Optional
 from urllib.parse import urljoin
@@ -308,22 +309,50 @@ def _parse_match_node(node: Node) -> dict:
 # ---------------------------------------------------------------------------
 # Generic team-by-name -> id resolver via search
 # ---------------------------------------------------------------------------
-def parse_team_links_from_search(html: str) -> list[dict]:
-    tree = HTMLParser(html)
+def parse_team_links_from_search(body: str) -> list[dict]:
+    # HLTV's /search?term=... returns a JSON payload (top-level array of
+    # category groups, each with "players"/"teams"/"events" arrays). The
+    # old HTML form is kept as a fallback in case HLTV ever rolls back.
     out: list[dict] = []
-    for a in tree.css("a[href*='/team/'], a[href*='/stats/teams/']"):
-        href = a.attributes.get("href") or ""
-        team_id = extract_id_from_url(href)
-        if not team_id:
-            continue
-        out.append(
-            {
-                "team": text_or_none(a) or slug_from_url(href),
-                "team_id": team_id,
-                "slug": slug_from_url(href),
-                "url": _abs(href),
-            }
-        )
+    try:
+        data = json.loads(body)
+    except (ValueError, TypeError):
+        data = None
+
+    if isinstance(data, list):
+        for group in data:
+            if not isinstance(group, dict):
+                continue
+            for t in group.get("teams") or []:
+                team_id = t.get("id")
+                if not team_id:
+                    continue
+                location = t.get("location") or ""
+                slug = location.rsplit("/", 1)[-1] if location else ""
+                out.append(
+                    {
+                        "team": t.get("name") or slug,
+                        "team_id": int(team_id),
+                        "slug": slug,
+                        "url": _abs(location) if location else None,
+                    }
+                )
+    else:
+        tree = HTMLParser(body)
+        for a in tree.css("a[href*='/team/'], a[href*='/stats/teams/']"):
+            href = a.attributes.get("href") or ""
+            team_id = extract_id_from_url(href)
+            if not team_id:
+                continue
+            out.append(
+                {
+                    "team": text_or_none(a) or slug_from_url(href),
+                    "team_id": team_id,
+                    "slug": slug_from_url(href),
+                    "url": _abs(href),
+                }
+            )
+
     seen = set()
     deduped = []
     for row in out:
