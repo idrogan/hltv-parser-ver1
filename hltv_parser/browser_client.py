@@ -17,6 +17,12 @@ from urllib.parse import urlencode, urljoin
 from playwright.sync_api import Error as PWError
 from playwright.sync_api import TimeoutError as PWTimeoutError
 from playwright.sync_api import sync_playwright
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from .client import BASE_URL, HLTVBlockedError, HLTVError
 
@@ -44,6 +50,12 @@ class HLTVBrowserClient:
                 time.sleep(wait + random.uniform(0, 0.4))
             self._last_request_at = time.monotonic()
 
+    @retry(
+        reraise=True,
+        retry=retry_if_exception_type(HLTVBlockedError),
+        stop=stop_after_attempt(4),
+        wait=wait_exponential(multiplier=2, min=2, max=30),
+    )
     def get(
         self,
         path: str,
