@@ -1,9 +1,12 @@
 """ScrapFly client for HLTV.
 
 Used when ``HLTV_SCRAPFLY_KEY`` is set. Routes requests through
-``api.scrapfly.io/scrape`` with anti-scraping-protection (``asp=true``) and
-JS rendering. Same ``get(path, params, referer)`` signature as
-:class:`HLTVClient` so :class:`HLTVService` can swap them transparently.
+``api.scrapfly.io/scrape`` with anti-scraping-protection (``asp=true``).
+JS rendering is off by default — HLTV serves stats as SSR HTML and
+``render_js=true`` makes ScrapFly chew through the Cloudflare interstitial
+in a real browser, which can stall past 90s and burn ~10x more credits.
+Same ``get(path, params, referer)`` signature as :class:`HLTVClient` so
+:class:`HLTVService` can swap them transparently.
 """
 from __future__ import annotations
 
@@ -28,13 +31,15 @@ class HLTVScrapflyClient:
         self,
         api_key: str,
         min_delay: float = 1.0,
-        timeout: int = 90,
+        timeout: int = 180,
         country: str = "us",
+        render_js: bool = False,
     ):
         self.api_key = api_key
         self.min_delay = min_delay
         self.timeout = timeout
         self.country = country
+        self.render_js = render_js
         self._last_request_at = 0.0
         self._lock = threading.Lock()
         self._session = cffi_requests.Session()
@@ -61,9 +66,10 @@ class HLTVScrapflyClient:
             "key": self.api_key,
             "url": target,
             "asp": "true",
-            "render_js": "true",
             "country": self.country,
         }
+        if self.render_js:
+            sf_params["render_js"] = "true"
         self._throttle()
         log.debug("ScrapFly GET %s", target)
 
