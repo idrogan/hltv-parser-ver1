@@ -44,19 +44,41 @@ def _stats_rows(tree: HTMLParser) -> dict[str, str]:
 
 
 def _highlight_boxes(tree: HTMLParser) -> dict[str, str]:
-    """Parse the ``.standard-box .large-strong`` / ``.small-label-below`` pairs."""
+    """Parse the ``.col.standard-box`` highlight tiles HLTV uses on stat pages.
+
+    Each tile is a single element carrying both ``col`` and ``standard-box``
+    classes, and contains a ``.small-label-below`` (label) plus a
+    ``.large-strong`` (value). Older layouts wrapped these in a separate
+    ``.col`` descendant — the legacy selectors are kept as a fallback.
+    """
     out: dict[str, str] = {}
-    for box in tree.css(".standard-box .col, .standard-box .columns .col"):
-        label = text_or_none(box.css_first(".small-label-below"))
-        value = text_or_none(box.css_first(".large-strong"))
-        if label and value:
-            out[label.lower().strip()] = value
+    selectors = (
+        ".col.standard-box",
+        ".standard-box .col",
+        ".standard-box .columns .col",
+    )
+    for sel in selectors:
+        for box in tree.css(sel):
+            label = text_or_none(box.css_first(".small-label-below"))
+            value = text_or_none(box.css_first(".large-strong"))
+            if label and value:
+                out.setdefault(label.lower().strip(), value)
     return out
 
 
 # ---------------------------------------------------------------------------
 # Team overview  -- /stats/teams/{id}/{slug}
 # ---------------------------------------------------------------------------
+def _parse_wdl(combined: Optional[str]) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    """Split a ``"23 / 0 / 15"`` style cell into ``(wins, draws, losses)``."""
+    if not combined:
+        return None, None, None
+    parts = [p.strip() for p in combined.split("/")]
+    if len(parts) != 3:
+        return None, None, None
+    return parse_int(parts[0]), parse_int(parts[1]), parse_int(parts[2])
+
+
 def parse_team_overview(html: str) -> dict:
     tree = HTMLParser(html)
     rows = _stats_rows(tree)
@@ -69,18 +91,34 @@ def parse_team_overview(html: str) -> dict:
                     return transform(src[k])
         return None
 
+    wins = pick("wins", transform=parse_int)
+    draws = pick("draws", transform=parse_int)
+    losses = pick("losses", transform=parse_int)
+    if wins is None and losses is None:
+        wins, draws, losses = _parse_wdl(
+            highlights.get("wins / draws / losses")
+            or rows.get("wins / draws / losses")
+            or highlights.get("w / d / l")
+        )
+
+    win_rate = pick("win rate", "win rate %", transform=parse_percent)
+    if win_rate is None and wins is not None and losses is not None:
+        decided = wins + losses
+        if decided > 0:
+            win_rate = round(wins / decided * 100, 2)
+
     return {
         "team_name": text_or_none(tree.css_first(".context-item-name"))
         or text_or_none(tree.css_first("h1")),
         "maps_played": pick("maps played", transform=parse_int),
-        "wins": pick("wins", transform=parse_int),
-        "draws": pick("draws", transform=parse_int),
-        "losses": pick("losses", transform=parse_int),
+        "wins": wins,
+        "draws": draws,
+        "losses": losses,
         "total_kills": pick("total kills", transform=parse_int),
         "total_deaths": pick("total deaths", transform=parse_int),
         "rounds_played": pick("rounds played", transform=parse_int),
         "kd_ratio": pick("k/d ratio", "k/d", transform=parse_number),
-        "win_rate_percent": pick("win rate", "win rate %", transform=parse_percent),
+        "win_rate_percent": win_rate,
     }
 
 
