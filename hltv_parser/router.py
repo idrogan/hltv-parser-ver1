@@ -14,9 +14,16 @@ from .service import HLTVService
 
 MIN_DELAY = float(os.getenv("HLTV_MIN_DELAY", "2.0"))
 PROXY = os.getenv("HLTV_PROXY") or None
+BROWSER_WS = os.getenv("HLTV_BROWSER_WS") or None
+
+if BROWSER_WS:
+    from .browser_client import HLTVBrowserClient
+    _client = HLTVBrowserClient(ws_endpoint=BROWSER_WS, min_delay=MIN_DELAY)
+else:
+    _client = HLTVClient(min_delay=MIN_DELAY, proxy=PROXY)
 
 router = APIRouter(prefix="/hltv", tags=["hltv"])
-_service = HLTVService(HLTVClient(min_delay=MIN_DELAY, proxy=PROXY))
+_service = HLTVService(_client)
 
 
 def register_exception_handlers(app) -> None:
