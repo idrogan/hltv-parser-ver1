@@ -71,12 +71,14 @@ class HLTVClient:
         impersonate: str = "chrome124",
         proxy: Optional[str] = None,
         flaresolverr_url: Optional[str] = None,
+        proxy_insecure: bool = False,
     ):
         self.min_delay = min_delay
         self.timeout = timeout
         self.impersonate = impersonate
         self.proxy = proxy
         self.flaresolverr_url = flaresolverr_url.rstrip("/") if flaresolverr_url else None
+        self.proxy_insecure = proxy_insecure
         self._last_request_at = 0.0
         self._lock = threading.Lock()
         self._session = cffi_requests.Session()
@@ -151,6 +153,7 @@ class HLTVClient:
         referer: Optional[str],
     ) -> tuple[int, str]:
         proxies = {"http": self.proxy, "https": self.proxy} if self.proxy else None
+        verify = not (self.proxy and self.proxy_insecure)
         try:
             resp = self._session.get(
                 url,
@@ -159,6 +162,7 @@ class HLTVClient:
                 timeout=self.timeout,
                 impersonate=self.impersonate,
                 proxies=proxies,
+                verify=verify,
             )
         except Exception as exc:
             raise HLTVBlockedError(f"network error: {exc}") from exc

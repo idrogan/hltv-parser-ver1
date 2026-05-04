@@ -15,10 +15,17 @@ from .service import HLTVService
 MIN_DELAY = float(os.getenv("HLTV_MIN_DELAY", "2.0"))
 PROXY = os.getenv("HLTV_PROXY") or None
 FLARESOLVERR_URL = os.getenv("HLTV_FLARESOLVERR_URL") or None
+PROXY_INSECURE = (os.getenv("HLTV_PROXY_INSECURE", "false").lower()
+                  in ("1", "true", "yes"))
 
 router = APIRouter(prefix="/hltv", tags=["hltv"])
 _service = HLTVService(
-    HLTVClient(min_delay=MIN_DELAY, proxy=PROXY, flaresolverr_url=FLARESOLVERR_URL)
+    HLTVClient(
+        min_delay=MIN_DELAY,
+        proxy=PROXY,
+        flaresolverr_url=FLARESOLVERR_URL,
+        proxy_insecure=PROXY_INSECURE,
+    )
 )
 
 
