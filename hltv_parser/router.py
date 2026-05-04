@@ -15,8 +15,15 @@ from .service import HLTVService
 MIN_DELAY = float(os.getenv("HLTV_MIN_DELAY", "2.0"))
 PROXY = os.getenv("HLTV_PROXY") or None
 BROWSER_WS = os.getenv("HLTV_BROWSER_WS") or None
+SCRAPFLY_KEY = os.getenv("HLTV_SCRAPFLY_KEY") or None
+SCRAPFLY_COUNTRY = os.getenv("HLTV_SCRAPFLY_COUNTRY", "us")
 
-if BROWSER_WS:
+if SCRAPFLY_KEY:
+    from .scrapfly_client import HLTVScrapflyClient
+    _client = HLTVScrapflyClient(
+        api_key=SCRAPFLY_KEY, min_delay=MIN_DELAY, country=SCRAPFLY_COUNTRY
+    )
+elif BROWSER_WS:
     from .browser_client import HLTVBrowserClient
     _client = HLTVBrowserClient(ws_endpoint=BROWSER_WS, min_delay=MIN_DELAY)
 else:
