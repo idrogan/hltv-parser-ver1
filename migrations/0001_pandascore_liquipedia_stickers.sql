@@ -164,23 +164,34 @@ create index if not exists ix_scraper_runs_name_time
 
 -- ---------------------------------------------------------------------------
 -- 7. Steam Market sticker tracking
+--
+-- Defensive: an earlier aspirational schema (examples/supabase_schema.sql)
+-- may already have created `watched_items` and `steam_prices` without
+-- `event_slug`. `create table if not exists` is a no-op against a
+-- pre-existing table — it does NOT add new columns. So we follow up
+-- with `alter table ... add column if not exists` for any column that
+-- wasn't in the legacy shape. Likewise, `steam_prices` keeps the
+-- legacy column names (`lowest_price`, `median_price`) so the table
+-- definition matches in both fresh and pre-existing databases.
 -- ---------------------------------------------------------------------------
 create table if not exists watched_items (
-    market_hash_name text        primary key,        -- exact Steam Market name
+    market_hash_name text        primary key,
     appid            int         not null default 730,
-    category         text,                           -- 'sticker' / 'capsule' / 'skin' — free-form tag
-    event_slug       text,                           -- e.g. 'pgl-major-copenhagen-2024' (joins to tournaments soft-link)
+    category         text,
+    event_slug       text,
     notes            text,
     added_at         timestamptz not null default now()
 );
+
+alter table watched_items add column if not exists event_slug text;
 
 create index if not exists ix_watched_items_event on watched_items (event_slug);
 
 create table if not exists steam_prices (
     id                bigserial primary key,
     market_hash_name  text        not null references watched_items (market_hash_name) on delete cascade,
-    lowest_price_usd  numeric(12, 2),
-    median_price_usd  numeric(12, 2),
+    lowest_price      numeric(12, 2),
+    median_price      numeric(12, 2),
     volume_24h        int,
     currency          int         not null default 1,
     fetched_at        timestamptz not null,
