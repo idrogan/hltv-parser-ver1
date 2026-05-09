@@ -94,6 +94,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("game")
     p.add_argument("slug")
 
+    ps = sources.add_parser("pandascore", help="PandaScore CS2 API")
+    psc = ps.add_subparsers(dest="cmd", required=True)
+    p = psc.add_parser("run", help="End-to-end pull → Supabase write")
+    p.add_argument("--days", type=int, default=7, dest="matches_window_days")
+    p.add_argument("--matches-pages", type=int, default=6, dest="matches_max_pages")
+    p.add_argument("--tournaments-pages", type=int, default=4, dest="tournaments_max_pages")
+    p.add_argument("--no-past-matches", action="store_true")
+    p.add_argument("--no-upcoming-matches", action="store_true")
+    p.add_argument("--no-running-tournaments", action="store_true")
+    p.add_argument("--no-upcoming-tournaments", action="store_true")
+
     liq = sources.add_parser("liquipedia", help="Liquipedia counterstrike wiki")
     lq = liq.add_subparsers(dest="cmd", required=True)
     p = lq.add_parser("run", help="End-to-end pull → Supabase write")
@@ -159,6 +170,19 @@ def main(argv: list[str] | None = None) -> int:
             return _print(svc.search(args.query, appid=args.appid, count=args.count, start=args.start))
         if args.cmd == "history":
             return _print(svc.price_history(args.market_hash_name, appid=args.appid))
+
+    if args.source == "pandascore":
+        if args.cmd == "run":
+            from pandascore_parser.runner import run_once
+            return _print(run_once(
+                matches_window_days=args.matches_window_days,
+                matches_max_pages=args.matches_max_pages,
+                tournaments_max_pages=args.tournaments_max_pages,
+                fetch_past_matches=not args.no_past_matches,
+                fetch_upcoming_matches=not args.no_upcoming_matches,
+                fetch_running_tournaments=not args.no_running_tournaments,
+                fetch_upcoming_tournaments=not args.no_upcoming_tournaments,
+            ))
 
     if args.source == "liquipedia":
         if args.cmd == "run":
