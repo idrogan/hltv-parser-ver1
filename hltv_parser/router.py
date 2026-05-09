@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from common import bearer_auth
 
-from .client import HLTVBlockedError, HLTVClient, HLTVError
+from .client import HLTVBlockedError, HLTVClient, HLTVError, HLTVPausedError
 from .service import HLTVService
 
 MIN_DELAY = float(os.getenv("HLTV_MIN_DELAY", "2.0"))
@@ -21,6 +21,10 @@ _service = HLTVService(HLTVClient(min_delay=MIN_DELAY, proxy=PROXY))
 
 def register_exception_handlers(app) -> None:
     """Attach HLTV-specific exception handlers to the parent FastAPI app."""
+
+    @app.exception_handler(HLTVPausedError)
+    async def _paused(_, exc: HLTVPausedError):
+        return JSONResponse(status_code=503, content={"error": "hltv_paused", "detail": str(exc)})
 
     @app.exception_handler(HLTVBlockedError)
     async def _blocked(_, exc: HLTVBlockedError):

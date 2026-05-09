@@ -47,6 +47,16 @@ class HLTVBlockedError(HLTVError):
     """Raised when Cloudflare blocks the request (403/503 with challenge)."""
 
 
+class HLTVPausedError(HLTVError):
+    """Raised when HLTV is gated off via ``HLTV_ENABLED=false``.
+
+    HLTV's anti-bot has been blocking ``/stats`` since early May 2026 and
+    we have no paid bypass budget right now, so the whole pipeline is
+    paused at the source. Code paths still exist; see ``RECON.md`` for
+    the un-pause procedure.
+    """
+
+
 class HLTVClient:
     """Thin wrapper around curl_cffi with throttling and retries.
 

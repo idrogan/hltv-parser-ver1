@@ -103,6 +103,19 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.source == "hltv":
         from hltv_parser import HLTVClient, HLTVService
+        from hltv_parser._flag import is_enabled as _hltv_enabled
+        if not _hltv_enabled():
+            logging.getLogger("hltv_parser._flag").warning(
+                "event=hltv_paused entry_point=cli.hltv.%s reason=HLTV_ENABLED_false",
+                args.cmd,
+            )
+            print(
+                json.dumps(
+                    {"error": "hltv_paused", "detail": "Set HLTV_ENABLED=true to re-enable."}
+                ),
+                file=sys.stderr,
+            )
+            return 3
         svc = HLTVService(HLTVClient(min_delay=args.min_delay, proxy=args.proxy))
         if args.cmd == "team":
             return _print(svc.team_overview(args.team_id, args.slug, args.start_date, args.end_date, args.months_back))

@@ -4,7 +4,8 @@ Public surface kept intentionally small so it can be embedded in scripts,
 N8N "Execute Command" nodes, or wrapped behind the bundled FastAPI server.
 """
 
-from .client import HLTVClient
+from ._flag import is_enabled as hltv_is_enabled
+from .client import HLTVBlockedError, HLTVClient, HLTVError, HLTVPausedError
 from .parsers import (
     parse_team_overview,
     parse_team_map_stats,
@@ -19,6 +20,10 @@ from .service import HLTVService
 __all__ = [
     "HLTVClient",
     "HLTVService",
+    "HLTVError",
+    "HLTVBlockedError",
+    "HLTVPausedError",
+    "hltv_is_enabled",
     "parse_team_overview",
     "parse_team_map_stats",
     "parse_team_matches",

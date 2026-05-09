@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from ._flag import gated
 from .client import HLTVClient
 from .parsers import (
     parse_player_stats,
@@ -31,6 +32,7 @@ class HLTVService:
         self.client = client or HLTVClient()
 
     # ---------------- teams ----------------
+    @gated
     def team_overview(
         self,
         team_id: int,
@@ -48,6 +50,7 @@ class HLTVService:
         data["window"] = {"start": s, "end": e}
         return data
 
+    @gated
     def team_map_stats(
         self,
         team_id: int,
@@ -70,6 +73,7 @@ class HLTVService:
         data["window"] = {"start": s, "end": e}
         return data
 
+    @gated
     def team_matches(
         self,
         team_id: int,
@@ -88,11 +92,13 @@ class HLTVService:
             "matches": parse_team_matches(html),
         }
 
+    @gated
     def find_team(self, name: str) -> list[dict]:
         html = self.client.get("/search", params={"term": name})
         return parse_team_links_from_search(html)
 
     # ---------------- players ----------------
+    @gated
     def player_stats(
         self,
         player_id: int,
@@ -111,14 +117,17 @@ class HLTVService:
         return data
 
     # ---------------- rankings / matches / results ----------------
+    @gated
     def rankings(self) -> list[dict]:
         html = self.client.get("/ranking/teams")
         return parse_rankings(html)
 
+    @gated
     def upcoming_matches(self) -> list[dict]:
         html = self.client.get("/matches")
         return parse_upcoming_matches(html)
 
+    @gated
     def results(self, offset: int = 0) -> list[dict]:
         params = {"offset": offset} if offset else None
         html = self.client.get("/results", params=params)
