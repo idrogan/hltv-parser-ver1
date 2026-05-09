@@ -50,6 +50,7 @@ class PandaScoreClient:
         api_key: Optional[str] = None,
         timeout: float = 30.0,
         soft_stop_ratio: float = 0.10,
+        absolute_floor: int = 50,
     ):
         key = api_key or os.getenv("PANDASCORE_API_KEY", "").strip()
         if not key:
@@ -68,6 +69,7 @@ class PandaScoreClient:
             },
         )
         self.soft_stop_ratio = soft_stop_ratio
+        self.absolute_floor = absolute_floor
         # Latest rate-limit observation. Updated on every successful response.
         self.rate_limit_limit: Optional[int] = None
         self.rate_limit_remaining: Optional[int] = None
@@ -97,6 +99,7 @@ class PandaScoreClient:
             pass  # absent or malformed headers — non-fatal
 
     def _check_soft_stop(self) -> None:
+        # Path A: ratio-based stop when both headers are present.
         if (
             self.rate_limit_limit
             and self.rate_limit_remaining is not None
@@ -107,6 +110,17 @@ class PandaScoreClient:
                 f"PandaScore soft-stop: remaining={self.rate_limit_remaining} "
                 f"of limit={self.rate_limit_limit} "
                 f"(<{int(self.soft_stop_ratio * 100)}%)"
+            )
+        # Path B: absolute floor when X-Rate-Limit-Limit is missing
+        # (PandaScore sometimes omits it — F3 in the architecture doc).
+        if (
+            self.rate_limit_limit is None
+            and self.rate_limit_remaining is not None
+            and self.rate_limit_remaining < self.absolute_floor
+        ):
+            raise PandaScoreQuotaExhausted(
+                f"PandaScore soft-stop (absolute floor): "
+                f"remaining={self.rate_limit_remaining} < {self.absolute_floor}"
             )
 
     # ---- public ---------------------------------------------------------
