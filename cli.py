@@ -81,6 +81,18 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("market_hash_name")
     p.add_argument("--appid", type=int, default=730)
 
+    p = s.add_parser("seed", help="Bulk add stickers to watched_items (read names from stdin or file, one per line)")
+    p.add_argument("--file", default=None, help="Path to a newline-separated names file. Default: stdin.")
+    p.add_argument("--event-slug", default=None, help="Tag every seeded item with this slug (e.g. 'iem-cologne-major-2026').")
+    p.add_argument("--category", default="sticker")
+    p.add_argument("--appid", type=int, default=730)
+
+    p = s.add_parser("refresh", help="Walk watched_items, write fresh prices to steam_prices")
+    p.add_argument("--event-slug", default=None, help="Filter watched_items by event_slug")
+    p.add_argument("--appid", type=int, default=None)
+    p.add_argument("--currency", type=int, default=1)
+    p.add_argument("--max-items", type=int, default=200)
+
     esc = sources.add_parser("escharts", help="EsportsCharts.com viewership")
     esc.add_argument("--min-delay", type=float, default=2.0)
     esc.add_argument("--proxy", default=None)
@@ -170,6 +182,29 @@ def main(argv: list[str] | None = None) -> int:
             return _print(svc.search(args.query, appid=args.appid, count=args.count, start=args.start))
         if args.cmd == "history":
             return _print(svc.price_history(args.market_hash_name, appid=args.appid))
+        if args.cmd == "seed":
+            from steam_market.runner import seed_watched_items
+            if args.file:
+                with open(args.file) as fh:
+                    names = [ln for ln in fh.read().splitlines() if ln.strip()]
+            else:
+                names = [ln for ln in sys.stdin.read().splitlines() if ln.strip()]
+            return _print(seed_watched_items(
+                names,
+                event_slug=args.event_slug,
+                category=args.category,
+                appid=args.appid,
+            ))
+        if args.cmd == "refresh":
+            from steam_market.runner import run_once
+            return _print(run_once(
+                event_slug=args.event_slug,
+                appid=args.appid,
+                currency=args.currency,
+                min_delay=args.min_delay,
+                proxy=args.proxy,
+                max_items=args.max_items,
+            ))
 
     if args.source == "pandascore":
         if args.cmd == "run":
