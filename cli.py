@@ -117,6 +117,24 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-running-tournaments", action="store_true")
     p.add_argument("--no-upcoming-tournaments", action="store_true")
 
+    viz = sources.add_parser("viz", help="Render Twitter-ready charts from Supabase")
+    vz = viz.add_subparsers(dest="cmd", required=True)
+
+    v = vz.add_parser("prize-pool-ladder", help="Top-N tournaments by prize pool")
+    v.add_argument("--limit", type=int, default=15)
+    v.add_argument("--year", type=int, default=None)
+    v.add_argument("--from-source", dest="from_source", default=None, help="liquipedia / pandascore / hltv / manual")
+    v.add_argument("--out-dir", default="out")
+
+    v = vz.add_parser("tournament-card", help="Single-tournament hero card")
+    v.add_argument("--id", type=int, required=True, help="tournaments.id (local pk)")
+    v.add_argument("--out-dir", default="out")
+
+    v = vz.add_parser("sticker-prices", help="Bar chart of current sticker prices")
+    v.add_argument("--event-slug", required=True, help="watched_items.event_slug filter")
+    v.add_argument("--top", type=int, default=20)
+    v.add_argument("--out-dir", default="out")
+
     liq = sources.add_parser("liquipedia", help="Liquipedia counterstrike wiki")
     lq = liq.add_subparsers(dest="cmd", required=True)
     p = lq.add_parser("run", help="End-to-end pull → Supabase write")
@@ -218,6 +236,21 @@ def main(argv: list[str] | None = None) -> int:
                 fetch_running_tournaments=not args.no_running_tournaments,
                 fetch_upcoming_tournaments=not args.no_upcoming_tournaments,
             ))
+
+    if args.source == "viz":
+        from pathlib import Path
+        out_dir = Path(args.out_dir)
+        if args.cmd == "prize-pool-ladder":
+            from viz.prize_pool_ladder import render
+        elif args.cmd == "tournament-card":
+            from viz.tournament_card import render
+        elif args.cmd == "sticker-prices":
+            from viz.sticker_prices import render
+        else:
+            print(f"unknown viz command: {args.cmd}", file=sys.stderr)
+            return 2
+        paths = render(args, out_dir)
+        return _print({"ok": True, "paths": [str(p) for p in paths]})
 
     if args.source == "liquipedia":
         if args.cmd == "run":

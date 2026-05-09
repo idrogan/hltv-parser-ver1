@@ -12,3 +12,10 @@ venv/
 build/
 dist/
 .cache/
+
+# Viz outputs (curated samples committed under out/samples/).
+# Ignore everything inside out/ EXCEPT the samples directory itself.
+# Note: ignoring `out/` outright would prevent git from descending into
+# it, so the !out/samples/ exception below would never match.
+out/*
+!out/samples/

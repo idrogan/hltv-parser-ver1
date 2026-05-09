@@ -9,6 +9,65 @@ Primary deployment target is **Render.com** for the parser API +
 **n8n Cloud** for orchestration. Local dev still works through
 docker-compose.
 
+> **Status (May 2026)**
+> * HLTV scraper paused via `HLTV_ENABLED=false` — see
+>   [`docs/RESUMING_HLTV.md`](docs/RESUMING_HLTV.md)
+> * PandaScore (CS2) and Steam Market write directly to Supabase
+> * Liquipedia parser scaffolded, gated on a `LIQUIPEDIA_API_KEY`
+> * Architecture review: [`ARCHITECTURE_REVISION_2026_05.md`](ARCHITECTURE_REVISION_2026_05.md)
+
+## Pipeline scrapers (write to Supabase)
+
+```bash
+# PandaScore — tournaments, matches, teams, players (CS2)
+python cli.py pandascore run [--days 7 --matches-pages 6 --tournaments-pages 4]
+
+# Liquipedia — tournaments + prize distribution (needs LIQUIPEDIA_API_KEY)
+python cli.py liquipedia run [--tier-max 2 --months-back 12]
+
+# Steam Market — sticker prices into steam_prices
+echo 'Sticker | Natus Vincere (Holo) | Copenhagen 2024' \
+  | python cli.py steam seed --event-slug pgl-copenhagen-2024
+python cli.py steam refresh [--event-slug pgl-copenhagen-2024]
+```
+
+Schema lives under [`migrations/`](migrations/). Apply by pasting the
+SQL into Supabase → SQL Editor or piping through `psql`.
+
+## Cron on the DO droplet
+
+```bash
+# Edit crontab on the droplet:
+crontab -e
+
+# Paste from scripts/crontab.example — runs pandascore every 6h and
+# steam refresh nightly at 02:00 UTC. Logs land in logs/<scraper>.log.
+```
+
+Wrapper script: [`scripts/run_scraper.sh`](scripts/run_scraper.sh).
+Loads `.env`, activates `.venv`/`venv` if present, and timestamps every
+log line.
+
+## Visualization (Twitter/Substack-ready PNGs)
+
+Three chart templates render directly from Supabase — each outputs
+both a `1200x675` widescreen and a `1080x1080` square into `out/`:
+
+```bash
+# Top-N tournaments by prize pool (gold accent on the leader)
+python cli.py viz prize-pool-ladder --year 2026 --limit 12 --from-source pandascore
+
+# Single-tournament hero card with status pill, dates, prize, teams
+python cli.py viz tournament-card --id 3
+
+# Sticker prices: Holo vs Regular per team, headline price labels
+python cli.py viz sticker-prices --event-slug pgl-copenhagen-2024
+```
+
+Sample renders are committed under [`out/samples/`](out/samples/).
+Brand palette / typography / margins live in
+[`viz/brand.py`](viz/brand.py) — change once, applies everywhere.
+
 ## What you can pull
 
 ### HLTV  — `/hltv/*`
