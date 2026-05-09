@@ -94,6 +94,17 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("game")
     p.add_argument("slug")
 
+    liq = sources.add_parser("liquipedia", help="Liquipedia counterstrike wiki")
+    lq = liq.add_subparsers(dest="cmd", required=True)
+    p = lq.add_parser("run", help="End-to-end pull → Supabase write")
+    p.add_argument("--tier-max", type=int, default=2)
+    p.add_argument("--months-back", type=int, default=12)
+    p.add_argument("--months-forward", type=int, default=6)
+    p.add_argument("--limit", type=int, default=100, dest="tournaments_limit")
+    p.add_argument("--detail-cap", type=int, default=20, dest="max_tournaments_for_detail")
+    p.add_argument("--no-prizes", action="store_true")
+    p.add_argument("--no-matches", action="store_true")
+
     return parser
 
 
@@ -148,6 +159,19 @@ def main(argv: list[str] | None = None) -> int:
             return _print(svc.search(args.query, appid=args.appid, count=args.count, start=args.start))
         if args.cmd == "history":
             return _print(svc.price_history(args.market_hash_name, appid=args.appid))
+
+    if args.source == "liquipedia":
+        if args.cmd == "run":
+            from liquipedia_parser.runner import run_once
+            return _print(run_once(
+                tier_max=args.tier_max,
+                months_back=args.months_back,
+                months_forward=args.months_forward,
+                tournaments_limit=args.tournaments_limit,
+                max_tournaments_for_detail=args.max_tournaments_for_detail,
+                fetch_prizes=not args.no_prizes,
+                fetch_matches=not args.no_matches,
+            ))
 
     if args.source == "escharts":
         from escharts_parser import EsChartsClient, EsChartsService
