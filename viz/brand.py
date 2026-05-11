@@ -67,7 +67,7 @@ MARGIN_RIGHT  = 0.96
 MARGIN_TOP    = 0.86   # leaves room for title + subtitle
 MARGIN_BOTTOM = 0.10   # leaves room for footer
 
-FOOTER_TEXT = "Data: PandaScore + Steam Market  ·  hltv-parser-ver1"
+FOOTER_TEXT = "Data: Pricempire + Steam Market  ·  @ivansdrogans"
 
 
 # ---- Setup -----------------------------------------------------------------

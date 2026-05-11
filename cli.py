@@ -167,6 +167,13 @@ def _build_parser() -> argparse.ArgumentParser:
     v.add_argument("--top", type=int, default=20)
     v.add_argument("--out-dir", default="out")
 
+    v = vz.add_parser("sticker-price-history",
+                      help="4-panel line/heatmap charts: capsule / autographs / "
+                           "champion (log) / ROI summary")
+    v.add_argument("--event-slug", required=True,
+                   help="eleague-atlanta-2017 | pgl-stockholm-2021")
+    v.add_argument("--out-dir", default="out")
+
     liq = sources.add_parser("liquipedia", help="Liquipedia counterstrike wiki")
     lq = liq.add_subparsers(dest="cmd", required=True)
     p = lq.add_parser("run", help="End-to-end pull → Supabase write")
@@ -307,6 +314,8 @@ def main(argv: list[str] | None = None) -> int:
             from viz.tournament_card import render
         elif args.cmd == "sticker-prices":
             from viz.sticker_prices import render
+        elif args.cmd == "sticker-price-history":
+            from viz.sticker_price_history import render
         else:
             print(f"unknown viz command: {args.cmd}", file=sys.stderr)
             return 2
