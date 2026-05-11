@@ -117,6 +117,22 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-running-tournaments", action="store_true")
     p.add_argument("--no-upcoming-tournaments", action="store_true")
 
+    sc = sources.add_parser("sticker-catalog",
+                            help="Seed sticker_catalog from hardcoded rosters, "
+                                 "verified by Steam Market priceoverview")
+    scc = sc.add_subparsers(dest="cmd", required=True)
+    p = scc.add_parser("seed",
+                       help="Walk candidates for --event-slug, probe Steam, "
+                            "upsert surviving SKUs into sticker_catalog")
+    p.add_argument("--event-slug", required=True,
+                   help="eleague-atlanta-2017 | pgl-stockholm-2021")
+    p.add_argument("--limit", type=int, default=None,
+                   help="Cap candidates probed (smoke test)")
+    p.add_argument("--dry-run", action="store_true",
+                   help="Verify against Steam but do NOT write to Supabase")
+    p.add_argument("--throttle", type=float, default=3.0,
+                   help="Seconds between priceoverview probes")
+
     sh = sources.add_parser("steam-history",
                             help="Steam Market lifetime price history (sticker_price_history table)")
     shc = sh.add_subparsers(dest="cmd", required=True)
@@ -251,6 +267,16 @@ def main(argv: list[str] | None = None) -> int:
                 fetch_upcoming_matches=not args.no_upcoming_matches,
                 fetch_running_tournaments=not args.no_running_tournaments,
                 fetch_upcoming_tournaments=not args.no_upcoming_tournaments,
+            ))
+
+    if args.source == "sticker-catalog":
+        if args.cmd == "seed":
+            from seeds.sticker_catalog import seed
+            return _print(seed(
+                event_slug=args.event_slug,
+                dry_run=args.dry_run,
+                limit=args.limit,
+                throttle=args.throttle,
             ))
 
     if args.source == "steam-history":
