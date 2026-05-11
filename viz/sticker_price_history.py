@@ -129,28 +129,58 @@ def _panel_capsule(event_slug: str, buckets, out_dir: Path) -> Path:
 
 
 def _panel_autographs(event_slug: str, buckets, out_dir: Path) -> Path:
-    """Panel 2: regular gold autographs per team-placement-tier."""
+    """Panel 2: regular high-tier player autographs across team tiers.
+
+    Different events use different "premium autograph" categories:
+      * Atlanta 2017 — ``foil`` (Gold variant exists but never traded)
+      * Stockholm 2021 — ``gold``
+    We pick the one whose bucket has the most items.
+    """
     from matplotlib import pyplot as plt
     brand.apply_style()
     fig, ax = brand.new_figure(brand.WIDESCREEN)
 
+    # Pick whichever autograph category has the richest data across
+    # podium+rest tiers. Atlanta lacks gold autograph trades, so it
+    # falls back to foil naturally.
+    autograph_candidates = ("gold", "foil", "champion_gold")
+    cat_choice = max(
+        autograph_candidates,
+        key=lambda c: sum(
+            buckets[(c, t)].item_count
+            for t in ("champion", "finalist", "top3", "rest")
+            if (c, t) in buckets
+        ),
+        default=None,
+    )
+    if not cat_choice or not any(
+        (cat_choice, t) in buckets for t in ("champion", "finalist", "top3", "rest")
+    ):
+        log.warning("no autograph buckets for %s — panel skipped", event_slug)
+        return None  # type: ignore[return-value]
+
+    color = _CATEGORY_COLOR.get(cat_choice, brand.ACCENT_3)
     plotted = False
-    for tier, label in (("top3", "Top-3 teams"), ("rest", "Rest")):
-        b = buckets.get(("gold", tier))
+    for tier, label, style in (
+        ("champion", "Champion (winners)",  "-"),
+        ("finalist", "Finalist (runners-up)", "-"),
+        ("top3",     "Top3 (semifinalists)",  "-"),
+        ("rest",     "Rest of field",          "--"),
+    ):
+        b = buckets.get((cat_choice, tier))
         if not b:
             continue
         xs = sorted(b.daily_median.keys())
         ys = [b.daily_median[x] for x in xs]
-        ax.plot(xs, ys, color=brand.ACCENT_3,
-                linewidth=2.0,
-                linestyle=_TIER_LINESTYLE[tier], label=label)
+        # Tint each tier slightly via alpha so the four lines are
+        # distinguishable while staying inside the category's color.
+        alpha = 1.0 if tier in ("champion", "finalist") else 0.7
+        ax.plot(xs, ys, color=color, linewidth=2.0,
+                linestyle=style, alpha=alpha, label=label)
         plotted = True
 
-    # Also draw paper-autograph baseline if we have it (catalog allows
-    # 'paper' player-autograph rows but for now we only seed team-level
-    # paper, so this line is usually missing — kept for forward-compat).
     if not plotted:
-        log.warning("no gold-autograph buckets for %s — panel skipped", event_slug)
+        log.warning("no autograph buckets for %s — panel skipped", event_slug)
         return None  # type: ignore[return-value]
 
     _add_event_guides(ax, event_slug)
@@ -159,9 +189,12 @@ def _panel_autographs(event_slug: str, buckets, out_dir: Path) -> Path:
     ax.legend(loc="upper right", frameon=False, labelcolor=brand.TEXT,
               fontsize=brand.FONT_SIZE_BAR)
     meta = _EVENT_META[event_slug]
-    brand.add_title(fig,
-                    f"Sticker prices · {meta['name']} · Gold autographs",
-                    "median per team-placement tier")
+    brand.add_title(
+        fig,
+        f"Sticker prices · {meta['name']} · "
+        f"{_CATEGORY_LABEL.get(cat_choice, cat_choice)} autographs",
+        "median per placement tier",
+    )
     brand.add_footer(fig)
     return brand.save(fig, f"{event_slug}-autographs", out_dir, brand.WIDESCREEN)
 

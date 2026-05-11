@@ -52,11 +52,13 @@ BUYER_PROFILES = {
 def _sb_get(path: str, params: dict) -> list[dict]:
     key = os.environ["SUPABASE_SERVICE_ROLE"]
     base = os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1"
-    # PostgREST defaults to 1000-row limit. We expect at most ~500k
-    # rows across both events, so we page with Range headers.
+    # Supabase's PostgREST caps each response at 1000 rows by default
+    # (db-max-rows), so we page in 1000-row chunks. Termination is by
+    # the Content-Range total, not "shorter than page" (which would
+    # also fire on the final partial page).
     out: list[dict] = []
     offset = 0
-    page = 5000
+    page = 1000
     while True:
         r = httpx.get(
             f"{base}/{path}",
@@ -66,15 +68,25 @@ def _sb_get(path: str, params: dict) -> list[dict]:
                 "Authorization": f"Bearer {key}",
                 "Range-Unit": "items",
                 "Range": f"{offset}-{offset + page - 1}",
+                "Prefer": "count=exact",
             },
             timeout=60,
         )
         r.raise_for_status()
         chunk = r.json()
+        if not chunk:
+            break
         out.extend(chunk)
+        cr = r.headers.get("content-range", "")  # e.g. "0-999/12345"
+        try:
+            total = int(cr.split("/")[-1])
+        except (ValueError, IndexError):
+            total = None
+        offset += len(chunk)
+        if total is not None and offset >= total:
+            break
         if len(chunk) < page:
             break
-        offset += page
     return out
 
 
