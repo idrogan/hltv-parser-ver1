@@ -105,181 +105,219 @@ def _format_time_axis(ax) -> None:
     ax.tick_params(axis="x", which="minor", length=3)
 
 
-def _panel_capsule(event_slug: str, buckets, out_dir: Path) -> Path:
-    """Panel 1: paper + holo + premium TEAM stickers (top3 vs rest)."""
+def _panel_capsule(event_slug: str, buckets, out_dir: Path,
+                   tier_filter: str, file_suffix: str) -> Path | None:
+    """One capsule panel restricted to a single placement-tier bucket.
+
+    ``tier_filter`` ∈ {'top3', 'rest'}. Each panel shows three lines
+    (paper / holo / foil-or-glitter) for that single tier, so the
+    high-value Foil line doesn't compress paper into the x-axis.
+
+    Title is short ('Atlanta 2017 · Top-3 capsule stickers'). Legend
+    sits below the plot area to keep the chart itself uncluttered.
+    """
     from matplotlib import pyplot as plt
     brand.apply_style()
 
     is_atlanta = "atlanta" in event_slug
     team_categories = ["paper", "holo", "foil" if is_atlanta else "glitter"]
 
-    fig, ax = brand.new_figure(brand.WIDESCREEN)
+    fig = plt.figure(figsize=brand.WIDESCREEN.figsize, dpi=brand.WIDESCREEN.dpi)
+    # Custom margins: leave 14% at the bottom for the legend + footer.
+    ax = fig.add_axes([0.08, 0.18, 0.88, 0.62])
 
     plotted = False
     for cat in team_categories:
+        b = buckets.get((cat, tier_filter))
+        if not b:
+            continue
+        monthly = _resample_monthly(b.daily_median)
+        xs = list(monthly.keys())
+        ys = list(monthly.values())
         color = _CATEGORY_COLOR[cat]
-        for tier in ("top3", "rest"):
-            b = buckets.get((cat, tier))
-            if not b:
-                continue
-            monthly = _resample_monthly(b.daily_median)
-            xs = list(monthly.keys())
-            ys = list(monthly.values())
-            ax.plot(
-                xs, ys,
-                color=color, linewidth=2.2,
-                linestyle=_TIER_LINESTYLE[tier],
-                marker="o", markersize=3.5, markerfacecolor=color,
-                markeredgecolor=color, alpha=0.95,
-                label=f"{_CATEGORY_LABEL[cat]} · {tier}",
-            )
-            plotted = True
+        ax.plot(
+            xs, ys,
+            color=color, linewidth=2.2,
+            marker="o", markersize=3.5, markerfacecolor=color,
+            markeredgecolor=color,
+            label=f"{_CATEGORY_LABEL[cat]}  (n={b.item_count})",
+        )
+        plotted = True
 
     if not plotted:
-        raise RuntimeError(
-            f"no buckets to plot for capsule panel ({event_slug})"
-        )
+        log.warning("no capsule buckets for %s/%s — panel skipped",
+                    event_slug, tier_filter)
+        return None
 
     _add_event_guides(ax, event_slug)
     _format_time_axis(ax)
-    ax.set_ylabel("USD · monthly median across bucket",
-                  color=brand.TEXT_MUTED)
+    ax.set_ylabel("USD · monthly median", color=brand.TEXT_MUTED)
     ax.grid(True, which="major", alpha=0.35)
     ax.grid(True, which="minor", alpha=0.12)
-    ax.legend(loc="upper left", frameon=False, labelcolor=brand.TEXT, ncols=3,
-              fontsize=brand.FONT_SIZE_BAR)
+
+    # Legend below the chart (in the 12% bottom band, above the footer).
+    ax.legend(
+        loc="upper center", bbox_to_anchor=(0.5, -0.08),
+        frameon=False, labelcolor=brand.TEXT,
+        ncols=len(team_categories), fontsize=brand.FONT_SIZE_BAR,
+    )
+
     meta = _EVENT_META[event_slug]
-    span_days = (max(b.latest_date for b in buckets.values())
-                 - meta["start"]).days
+    short_event = meta["name"].replace("ELEAGUE Major: ", "") \
+                              .replace("PGL Major: ", "")
+    tier_label = "Top-3 teams" if tier_filter == "top3" else "Rest of field"
     brand.add_title(
         fig,
-        f"Sticker prices · {meta['name']} · Capsule stickers",
-        f"release: {meta['start'].isoformat()} · {span_days} days of history "
-        f"· solid = top3 teams · dashed = rest",
+        f"{short_event} · {tier_label}",
+        f"capsule stickers · monthly median · "
+        f"release {meta['start'].isoformat()}",
     )
     brand.add_footer(fig)
-    return brand.save(fig, f"{event_slug}-capsule-stickers", out_dir, brand.WIDESCREEN)
+    return brand.save(fig, f"{event_slug}-capsule-{file_suffix}",
+                      out_dir, brand.WIDESCREEN)
 
 
-def _panel_autographs(event_slug: str, buckets, out_dir: Path) -> Path:
-    """Panel 2: regular high-tier player autographs across team tiers.
+def _panel_autographs(event_slug: str, buckets, out_dir: Path) -> Path | None:
+    """Autograph categories shown across the top tier (Top3 + Finalist).
 
-    Different events use different "premium autograph" categories:
-      * Atlanta 2017 — ``foil`` (Gold variant exists but never traded)
-      * Stockholm 2021 — ``gold``
-    We pick the one whose bucket has the most items.
+    Each category becomes one line (paper / holo / foil-or-glitter /
+    gold). Champion-tier autographs live on the next panel because of
+    the price-scale gap.
     """
     from matplotlib import pyplot as plt
     brand.apply_style()
-    fig, ax = brand.new_figure(brand.WIDESCREEN)
 
-    # Pick whichever autograph category has the richest data across
-    # podium+rest tiers. Atlanta lacks gold autograph trades, so it
-    # falls back to foil naturally.
-    autograph_candidates = ("gold", "foil", "champion_gold")
-    cat_choice = max(
-        autograph_candidates,
-        key=lambda c: sum(
-            buckets[(c, t)].item_count
-            for t in ("champion", "finalist", "top3", "rest")
-            if (c, t) in buckets
-        ),
-        default=None,
+    fig = plt.figure(figsize=brand.WIDESCREEN.figsize, dpi=brand.WIDESCREEN.dpi)
+    ax = fig.add_axes([0.08, 0.18, 0.88, 0.62])
+
+    is_atlanta = "atlanta" in event_slug
+    autograph_categories = (
+        ["paper", "holo", "foil", "gold"] if is_atlanta
+        else ["paper", "holo", "glitter", "gold"]
     )
-    if not cat_choice or not any(
-        (cat_choice, t) in buckets for t in ("champion", "finalist", "top3", "rest")
-    ):
-        log.warning("no autograph buckets for %s — panel skipped", event_slug)
-        return None  # type: ignore[return-value]
 
-    color = _CATEGORY_COLOR.get(cat_choice, brand.ACCENT_3)
     plotted = False
-    for tier, label, style in (
-        ("champion", "Champion (winners)",  "-"),
-        ("finalist", "Finalist (runners-up)", "-"),
-        ("top3",     "Top3 (semifinalists)",  "-"),
-        ("rest",     "Rest of field",          "--"),
-    ):
-        b = buckets.get((cat_choice, tier))
-        if not b:
+    for cat in autograph_categories:
+        # Merge top3 + finalist series — they're the "non-champion
+        # podium" buckets and have similar item counts.
+        merged: dict = {}
+        item_total = 0
+        for tier in ("top3", "finalist"):
+            b = buckets.get((cat, tier))
+            if not b:
+                continue
+            item_total += b.item_count
+            for d, v in b.daily_median.items():
+                merged.setdefault(d, []).append(v)
+        if not merged:
             continue
-        xs = sorted(b.daily_median.keys())
-        ys = [b.daily_median[x] for x in xs]
-        # Tint each tier slightly via alpha so the four lines are
-        # distinguishable while staying inside the category's color.
-        alpha = 1.0 if tier in ("champion", "finalist") else 0.7
-        ax.plot(xs, ys, color=color, linewidth=2.0,
-                linestyle=style, alpha=alpha, label=label)
+        # Median across the joined points per date, then monthly resample.
+        from statistics import median
+        daily = {d: median(vs) for d, vs in merged.items()}
+        monthly = _resample_monthly(daily)
+        if not monthly:
+            continue
+        xs = list(monthly.keys())
+        ys = list(monthly.values())
+        color = _CATEGORY_COLOR[cat]
+        ax.plot(
+            xs, ys, color=color, linewidth=2.2,
+            marker="o", markersize=3.5, markerfacecolor=color,
+            markeredgecolor=color,
+            label=f"{_CATEGORY_LABEL[cat]}  (n={item_total})",
+        )
         plotted = True
 
     if not plotted:
         log.warning("no autograph buckets for %s — panel skipped", event_slug)
-        return None  # type: ignore[return-value]
+        return None
 
     _add_event_guides(ax, event_slug)
-    ax.set_ylabel("USD (bucket median)", color=brand.TEXT_MUTED)
-    ax.grid(True, alpha=0.3)
-    ax.legend(loc="upper right", frameon=False, labelcolor=brand.TEXT,
-              fontsize=brand.FONT_SIZE_BAR)
+    _format_time_axis(ax)
+    ax.set_ylabel("USD · monthly median", color=brand.TEXT_MUTED)
+    ax.grid(True, which="major", alpha=0.35)
+    ax.grid(True, which="minor", alpha=0.12)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.08),
+              frameon=False, labelcolor=brand.TEXT,
+              ncols=len(autograph_categories), fontsize=brand.FONT_SIZE_BAR)
+
     meta = _EVENT_META[event_slug]
+    short_event = meta["name"].replace("ELEAGUE Major: ", "") \
+                              .replace("PGL Major: ", "")
     brand.add_title(
         fig,
-        f"Sticker prices · {meta['name']} · "
-        f"{_CATEGORY_LABEL.get(cat_choice, cat_choice)} autographs",
-        "median per placement tier",
+        f"{short_event} · Finalist + Top-3 autographs",
+        "player autographs · monthly median across both tiers",
     )
     brand.add_footer(fig)
     return brand.save(fig, f"{event_slug}-autographs", out_dir, brand.WIDESCREEN)
 
 
-def _panel_champion(event_slug: str, buckets, out_dir: Path) -> Path:
-    """Panel 3: champion-tier autographs on log scale."""
+def _panel_champion(event_slug: str, buckets, out_dir: Path) -> Path | None:
+    """Champion-tier autographs only. Categories are the lines.
+
+    Y is log-scaled because a $200 Champion-Gold sits two decades
+    above the $2 Champion-Paper on the same timeline.
+    """
     from matplotlib import pyplot as plt
     brand.apply_style()
-    fig, ax = brand.new_figure(brand.WIDESCREEN)
 
-    # Atlanta 2017 has no separate Champion category — the top-tier
-    # autograph is (Foil) or (Gold). For Atlanta we plot the 'gold'
-    # category restricted to placement_tier='champion'. For Stockholm
-    # we plot the 'champion_gold' category.
+    fig = plt.figure(figsize=brand.WIDESCREEN.figsize, dpi=brand.WIDESCREEN.dpi)
+    ax = fig.add_axes([0.08, 0.18, 0.88, 0.62])
+
     is_atlanta = "atlanta" in event_slug
-    if is_atlanta:
-        champ_keys = [("foil", "champion"), ("gold", "champion")]
-        tier_label = "Astralis player Foil & Gold autographs"
-    else:
-        champ_keys = [("champion_gold", "champion"), ("gold", "champion")]
-        tier_label = "NaVi player Champion & Gold autographs"
+    champ_categories = (
+        ["paper", "holo", "foil", "gold"] if is_atlanta
+        else ["paper", "holo", "glitter", "gold", "champion_gold"]
+    )
 
-    any_plotted = False
-    for cat, tier in champ_keys:
-        b = buckets.get((cat, tier))
+    plotted = False
+    for cat in champ_categories:
+        b = buckets.get((cat, "champion"))
         if not b:
             continue
-        xs = sorted(b.daily_median.keys())
-        ys = [b.daily_median[x] for x in xs if b.daily_median[x] > 0]
-        xs = [x for x, y in zip(xs, [b.daily_median[x] for x in xs]) if y > 0]
-        ax.plot(xs, ys,
-                color=_CATEGORY_COLOR.get(cat, brand.ACCENT),
-                linewidth=2.0,
-                label=_CATEGORY_LABEL.get(cat, cat))
-        any_plotted = True
+        monthly = _resample_monthly(b.daily_median)
+        # Strip zeros for log scale.
+        monthly = {d: v for d, v in monthly.items() if v > 0}
+        if not monthly:
+            continue
+        xs = list(monthly.keys())
+        ys = list(monthly.values())
+        color = _CATEGORY_COLOR.get(cat, brand.ACCENT)
+        ax.plot(
+            xs, ys, color=color, linewidth=2.2,
+            marker="o", markersize=3.5, markerfacecolor=color,
+            markeredgecolor=color,
+            label=f"{_CATEGORY_LABEL.get(cat, cat)}  (n={b.item_count})",
+        )
+        plotted = True
 
-    if not any_plotted:
+    if not plotted:
         log.warning("no champion buckets for %s — panel skipped", event_slug)
-        return None  # type: ignore[return-value]
+        return None
 
     ax.set_yscale("log")
     _add_event_guides(ax, event_slug)
-    ax.set_ylabel("USD (log scale)", color=brand.TEXT_MUTED)
-    ax.grid(True, which="both", alpha=0.3)
-    ax.legend(loc="upper right", frameon=False, labelcolor=brand.TEXT,
-              fontsize=brand.FONT_SIZE_BAR)
+    _format_time_axis(ax)
+    ax.set_ylabel("USD · monthly median (log scale)", color=brand.TEXT_MUTED)
+    ax.grid(True, which="major", alpha=0.35)
+    ax.grid(True, which="minor", alpha=0.12)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.08),
+              frameon=False, labelcolor=brand.TEXT,
+              ncols=len(champ_categories), fontsize=brand.FONT_SIZE_BAR)
+
     meta = _EVENT_META[event_slug]
-    brand.add_title(fig,
-                    f"Sticker prices · {meta['name']} · Champion autographs",
-                    f"{tier_label}  ·  log scale")
+    short_event = meta["name"].replace("ELEAGUE Major: ", "") \
+                              .replace("PGL Major: ", "")
+    champ_team = "Astralis" if is_atlanta else "NaVi"
+    brand.add_title(
+        fig,
+        f"{short_event} · Champion autographs",
+        f"{champ_team} player autographs · monthly median · log scale",
+    )
     brand.add_footer(fig)
-    return brand.save(fig, f"{event_slug}-champion-autographs", out_dir, brand.WIDESCREEN)
+    return brand.save(fig, f"{event_slug}-champion-autographs",
+                      out_dir, brand.WIDESCREEN)
 
 
 def _panel_roi_summary(event_slug: str, buckets, out_dir: Path) -> Path:
@@ -402,7 +440,18 @@ def render(args, out_dir: Path) -> list[Path]:
         )
     buckets = aggregate(event_slug)
     paths = []
-    for fn in (_panel_capsule, _panel_autographs, _panel_champion, _panel_roi_summary):
+
+    # Capsule: two panels (top3 vs rest) so the foil/glitter line
+    # doesn't crush the paper/holo lines into the x-axis.
+    for tier, suffix in (("top3", "stickers-top3"), ("rest", "stickers-rest")):
+        try:
+            p = _panel_capsule(event_slug, buckets, out_dir, tier, suffix)
+            if p is not None:
+                paths.append(p)
+        except Exception as exc:
+            log.error("panel capsule/%s failed: %s", tier, exc)
+
+    for fn in (_panel_autographs, _panel_champion, _panel_roi_summary):
         try:
             p = fn(event_slug, buckets, out_dir)
             if p is not None:
