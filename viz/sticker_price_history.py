@@ -78,6 +78,33 @@ _EVENT_META = {
 _CS2_LAUNCH = date(2023, 9, 27)
 
 
+def _resample_monthly(series: dict[date, float]) -> dict[date, float]:
+    """Collapse a daily ``{date: price}`` map to one point per month.
+
+    The point is anchored at the first of each month (matplotlib draws
+    nice ticks at month boundaries), and the value is the median across
+    every day in that month. Reduces a 3400-day Atlanta series down
+    to ~110 monthly points — the chart can breathe.
+    """
+    from statistics import median
+    by_month: dict[date, list[float]] = {}
+    for d, v in series.items():
+        anchor = date(d.year, d.month, 1)
+        by_month.setdefault(anchor, []).append(v)
+    return {m: round(median(vs), 4) for m, vs in sorted(by_month.items())}
+
+
+def _format_time_axis(ax) -> None:
+    """Major ticks per year, minor per quarter, '2017'-style labels."""
+    from matplotlib.dates import YearLocator, MonthLocator, DateFormatter
+    ax.xaxis.set_major_locator(YearLocator())
+    ax.xaxis.set_minor_locator(MonthLocator(bymonth=(4, 7, 10)))
+    ax.xaxis.set_major_formatter(DateFormatter("%Y"))
+    ax.tick_params(axis="x", which="major", labelsize=brand.FONT_SIZE_BAR,
+                   colors=brand.TEXT)
+    ax.tick_params(axis="x", which="minor", length=3)
+
+
 def _panel_capsule(event_slug: str, buckets, out_dir: Path) -> Path:
     """Panel 1: paper + holo + premium TEAM stickers (top3 vs rest)."""
     from matplotlib import pyplot as plt
@@ -95,12 +122,15 @@ def _panel_capsule(event_slug: str, buckets, out_dir: Path) -> Path:
             b = buckets.get((cat, tier))
             if not b:
                 continue
-            xs = sorted(b.daily_median.keys())
-            ys = [b.daily_median[x] for x in xs]
+            monthly = _resample_monthly(b.daily_median)
+            xs = list(monthly.keys())
+            ys = list(monthly.values())
             ax.plot(
                 xs, ys,
-                color=color, linewidth=2.0,
+                color=color, linewidth=2.2,
                 linestyle=_TIER_LINESTYLE[tier],
+                marker="o", markersize=3.5, markerfacecolor=color,
+                markeredgecolor=color, alpha=0.95,
                 label=f"{_CATEGORY_LABEL[cat]} · {tier}",
             )
             plotted = True
@@ -111,9 +141,12 @@ def _panel_capsule(event_slug: str, buckets, out_dir: Path) -> Path:
         )
 
     _add_event_guides(ax, event_slug)
-    ax.set_ylabel("USD (bucket median)", color=brand.TEXT_MUTED)
-    ax.grid(True, alpha=0.3)
-    ax.legend(loc="upper right", frameon=False, labelcolor=brand.TEXT, ncols=3,
+    _format_time_axis(ax)
+    ax.set_ylabel("USD · monthly median across bucket",
+                  color=brand.TEXT_MUTED)
+    ax.grid(True, which="major", alpha=0.35)
+    ax.grid(True, which="minor", alpha=0.12)
+    ax.legend(loc="upper left", frameon=False, labelcolor=brand.TEXT, ncols=3,
               fontsize=brand.FONT_SIZE_BAR)
     meta = _EVENT_META[event_slug]
     span_days = (max(b.latest_date for b in buckets.values())
