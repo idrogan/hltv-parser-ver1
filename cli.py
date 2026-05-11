@@ -117,6 +117,22 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-running-tournaments", action="store_true")
     p.add_argument("--no-upcoming-tournaments", action="store_true")
 
+    sh = sources.add_parser("steam-history",
+                            help="Steam Market lifetime price history (sticker_price_history table)")
+    shc = sh.add_subparsers(dest="cmd", required=True)
+    p = shc.add_parser("backfill",
+                       help="Walk a catalog (or --names list) and upsert daily price history rows")
+    p.add_argument("--event-slug", default=None,
+                   help="sticker_catalog.event_slug filter (e.g. pgl-stockholm-2021)")
+    p.add_argument("--names", default=None,
+                   help="Comma-separated market_hash_name list (smoke test mode, no catalog required)")
+    p.add_argument("--limit", type=int, default=None,
+                   help="Cap items processed (smoke test)")
+    p.add_argument("--dry-run", action="store_true",
+                   help="Fetch + parse but do NOT write to Supabase")
+    p.add_argument("--min-delay", type=float, default=5.0,
+                   help="Floor between requests in seconds (Steam Market rate limit)")
+
     viz = sources.add_parser("viz", help="Render Twitter-ready charts from Supabase")
     vz = viz.add_subparsers(dest="cmd", required=True)
 
@@ -235,6 +251,25 @@ def main(argv: list[str] | None = None) -> int:
                 fetch_upcoming_matches=not args.no_upcoming_matches,
                 fetch_running_tournaments=not args.no_running_tournaments,
                 fetch_upcoming_tournaments=not args.no_upcoming_tournaments,
+            ))
+
+    if args.source == "steam-history":
+        if args.cmd == "backfill":
+            from steam_market.history_runner import backfill
+            if bool(args.event_slug) == bool(args.names):
+                print("steam-history backfill requires exactly one of "
+                      "--event-slug or --names", file=sys.stderr)
+                return 2
+            names_iter = (
+                [n.strip() for n in args.names.split(",") if n.strip()]
+                if args.names else None
+            )
+            return _print(backfill(
+                event_slug=args.event_slug,
+                names=names_iter,
+                dry_run=args.dry_run,
+                limit=args.limit,
+                min_delay=args.min_delay,
             ))
 
     if args.source == "viz":
