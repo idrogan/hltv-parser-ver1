@@ -144,6 +144,8 @@ STOCKHOLM_2021 = {
          "players": ["gla1ve", "Xyp9x", "Magisk", "blameF", "k0nfig"]},
         {"team": "ENCE",               "tier": "rest",
          "players": ["Aleksib", "Snappi", "allu", "sergej", "Aerial"]},
+        {"team": "Team Liquid",        "tier": "rest",
+         "players": ["EliGE", "NAF", "Stewie2K", "FalleN", "oSee"]},
         {"team": "Team Spirit",        "tier": "rest",
          "players": ["chopper", "magixx", "degster", "sdy", "Patsi"]},
         {"team": "MOUZ",               "tier": "rest",
