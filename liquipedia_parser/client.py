@@ -1,43 +1,35 @@
 """Liquipedia API client.
 
-Two-API design:
+Path chosen: public MediaWiki ``action=query`` against
+https://liquipedia.net/counterstrike/api.php — no API key.
 
-A. **Public MediaWiki API** at https://liquipedia.net/counterstrike/api.php
-   * 1 request / 2 sec across the whole client (TOS).
-   * action=parse capped at 1 / 30 sec — resource-intensive.
-   * action=cargoquery is NOT exposed here (verified 2026-05-09: returns
-     ``badvalue: Unrecognized value for parameter "action"``).
-   * Custom User-Agent with project + contact email mandatory.
-   * gzip support mandatory.
+Liquipedia support confirmed (2026-05-14) that for this project the
+public site is sufficient: data is available, an API key is not
+required. Practical consequence: we read wikitext via ``action=query``
+and parse it locally (see ``wikitext.py``), instead of using the
+heavily-throttled ``action=parse`` (1 req / 30 sec) or the gated
+LiquipediaDB API (60 req / hour, requires approval).
 
-B. **LiquipediaDB API** (a.k.a. api.liquipedia.net)
-   * Requires registration → approval → API key.
-   * Free tier: 60 requests / hour.
-   * Exposes structured Cargo queries (the equivalent of action=cargoquery).
-   * Auth scheme: documented behind the LiquipediaDB Dashboard login;
-     left as a small adapter in this client so it can be filled in
-     accurately the moment we have the docs (see ``cargoquery``).
-
-Until ``LIQUIPEDIA_API_KEY`` is set, ``cargoquery`` raises a clear
-error pointing at registration. The MediaWiki path (parse, query) is
-reserved for things that don't require structured cargo.
-
-TOS reference (verbatim summary, fetched 2026-05-09 from
-https://liquipedia.net/api-terms-of-use):
+TOS reference (https://liquipedia.net/api-terms-of-use, fetched
+2026-05-14):
 
   1. Rate limit ALL HTTP requests to no more than 1 request per 2 seconds.
-  2. action=parse requests must not exceed 1 / 30 seconds.
+  2. action=parse must not exceed 1 / 30 seconds  → we avoid it.
   3. User-Agent: ``ProjectName/version (https://example.com/; you@example.com)``
+     — Generic UAs (``python-requests``, ``Go-http-client``, ...) are
+     actively blocked. Email is mandatory.
   4. HTTP client must accept Content-Encoding: gzip.
   5. Reuse the HTTP client across requests.
-  6. Authenticated calls only when needed.
-  7. Violations → automated temporary IP bans (we hit one during dev).
-  8. LiquipediaDB API: ≤ 60 req/hour, credentials issued on approval.
+  6. Violations → automated temporary IP bans.
+  7. LiquipediaDB API: ≤ 60 req/hour, credentials issued on approval —
+     not used here; kept as a stub in ``cargoquery`` for future need.
 
 Plus our own additions:
 
   * Filesystem cache keyed by query + UTC day so re-runs in the same
     day don't re-fetch.
+  * Hard floor of 2.0 s between requests, enforced under a lock so
+    concurrent callers can't accidentally violate TOS.
 """
 from __future__ import annotations
 
@@ -142,6 +134,137 @@ class LiquipediaClient:
         return self.cache_dir / day / f"{digest}.json"
 
     # ---- public ---------------------------------------------------------
+
+    def _query(
+        self,
+        params: dict[str, Any],
+        *,
+        use_cache: bool = True,
+    ) -> dict[str, Any]:
+        """Issue one MediaWiki ``api.php`` request with TOS throttling.
+
+        Returns the parsed JSON payload. Caller is responsible for
+        digging into ``payload["query"]``.
+        """
+        params = {**params, "format": "json", "formatversion": "2"}
+
+        cache_path = self._cache_path(params)
+        if use_cache and cache_path.exists():
+            log.debug("liquipedia cache hit: %s", cache_path)
+            return json.loads(cache_path.read_text())
+
+        self._throttle()
+        try:
+            r = self._client.get(API_URL, params=params)
+        except httpx.HTTPError as e:
+            raise LiquipediaError(f"network error: {e}") from e
+
+        if r.status_code == 429:
+            retry_after = r.headers.get("Retry-After")
+            raise LiquipediaRateLimited(
+                f"Liquipedia 429; Retry-After={retry_after}"
+            )
+        if r.status_code >= 500:
+            raise LiquipediaError(f"Liquipedia upstream {r.status_code}")
+        if r.status_code != 200:
+            raise LiquipediaError(
+                f"Liquipedia status {r.status_code}: {r.text[:200]}"
+            )
+
+        try:
+            payload = r.json()
+        except json.JSONDecodeError as e:
+            raise LiquipediaError(f"non-JSON response: {e}") from e
+
+        if "error" in payload:
+            raise LiquipediaError(f"Liquipedia API error: {payload['error']}")
+
+        if use_cache:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(json.dumps(payload, ensure_ascii=False))
+
+        return payload
+
+    def query_revisions(
+        self,
+        title: str,
+        *,
+        use_cache: bool = True,
+    ) -> Optional[str]:
+        """Fetch raw wikitext for one page via ``action=query``.
+
+        Returns the wikitext string, or ``None`` if the page is missing
+        / redirected to nothing. We follow redirects so e.g.
+        ``PGL_Major_Copenhagen_2024`` is normalised to its canonical
+        title.
+
+        Uses the standard 1 req / 2 sec throttle (not the 1 / 30 sec
+        ``action=parse`` rate), which is why we read raw wikitext and
+        parse it locally.
+        """
+        log.info("event=liquipedia_request action=query.revisions title=%r", title)
+        payload = self._query(
+            {
+                "action": "query",
+                "prop": "revisions",
+                "titles": title,
+                "rvslots": "main",
+                "rvprop": "content",
+                "redirects": "1",
+            },
+            use_cache=use_cache,
+        )
+        pages = payload.get("query", {}).get("pages", []) or []
+        if not pages:
+            return None
+        page = pages[0]
+        if page.get("missing") or page.get("invalid"):
+            return None
+        revisions = page.get("revisions") or []
+        if not revisions:
+            return None
+        slots = revisions[0].get("slots") or {}
+        main = slots.get("main") or {}
+        return main.get("content")
+
+    def category_members(
+        self,
+        category: str,
+        *,
+        limit_per_page: int = 500,
+        max_pages: int = 5,
+        use_cache: bool = True,
+    ) -> list[str]:
+        """List page titles in a Liquipedia category.
+
+        ``category`` is the title without the ``Category:`` prefix
+        (e.g. ``"S-Tier_Tournaments"``). Pagination uses MediaWiki's
+        ``cmcontinue`` token; we cap at ``max_pages`` continuations to
+        keep a single discovery call bounded under TOS.
+        """
+        log.info(
+            "event=liquipedia_request action=query.categorymembers cat=%r",
+            category,
+        )
+        titles: list[str] = []
+        cont: Optional[str] = None
+        for _ in range(max_pages):
+            params: dict[str, Any] = {
+                "action": "query",
+                "list": "categorymembers",
+                "cmtitle": f"Category:{category}",
+                "cmlimit": limit_per_page,
+                "cmtype": "page",
+            }
+            if cont:
+                params["cmcontinue"] = cont
+            payload = self._query(params, use_cache=use_cache)
+            members = payload.get("query", {}).get("categorymembers", []) or []
+            titles.extend(m.get("title") for m in members if m.get("title"))
+            cont = (payload.get("continue") or {}).get("cmcontinue")
+            if not cont:
+                break
+        return titles
 
     def cargoquery(
         self,
