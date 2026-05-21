@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Discovery script: dump the live Supabase Postgres schema.
 
+Standard-library only — no pip installs, no virtualenv, no project layout
+needed. Copy this single file anywhere with Python 3.8+ and outbound
+internet to your Supabase project and run it.
+
 The build spec's "Existing Infrastructure" section is based on a discovery
 report that may be inaccurate. Run this against the *real* database and send
 the output back BEFORE any pydantic models are written.
 
-Access pattern mirrors the pipeline's Supabase writer: plain httpx against
-the PostgREST API with the service_role key. No supabase-py, no direct
-Postgres connection (so no DB password is needed).
+Access pattern: plain HTTPS against the PostgREST API with the service_role
+key. No supabase-py, no direct Postgres connection (so no DB password).
 
 How it works
 ------------
@@ -19,15 +22,12 @@ How it works
 
 Usage
 -----
-    pip install httpx python-dotenv
-
-    # credentials via a .env file (looked up next to this script, in
-    # backend/, or in the current dir) or via real environment variables:
+    # credentials via real environment variables or a nearby .env file
     export SUPABASE_URL=https://<project-ref>.supabase.co
     export SUPABASE_SERVICE_ROLE=<service_role key, NOT the anon key>
 
-    python backend/scripts/inspect_schema.py          # human-readable report
-    python backend/scripts/inspect_schema.py --json    # machine-readable JSON
+    python3 inspect_schema.py          # human-readable report
+    python3 inspect_schema.py --json    # machine-readable JSON
 
 Note: PostgREST only exposes relations in the configured schema (``public``
 by default). Anything in another schema, or hidden from the API, will not
@@ -39,30 +39,28 @@ import argparse
 import json
 import os
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
-try:
-    import httpx
-except ImportError:
-    sys.exit("missing dependency: run `pip install httpx`")
 
-
-def _load_env() -> None:
-    """Load a .env file if python-dotenv is available. Optional."""
-    try:
-        from dotenv import load_dotenv
-    except ImportError:
-        return
+def _load_env_file() -> None:
+    """Best-effort load of KEY=VALUE lines from a nearby .env file (no deps)."""
     here = Path(__file__).resolve()
-    candidates = [
-        here.parent / ".env",            # backend/scripts/.env
-        here.parents[1] / ".env",        # backend/.env
-        Path.cwd() / ".env",             # ./.env
-    ]
+    candidates = [here.parent / ".env", Path.cwd() / ".env"]
+    if len(here.parents) > 1:
+        candidates.insert(1, here.parents[1] / ".env")
     for path in candidates:
-        if path.is_file():
-            load_dotenv(path)
-            return
+        if not path.is_file():
+            continue
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+        return
 
 
 def _require_env() -> tuple[str, str]:
@@ -78,6 +76,25 @@ def _require_env() -> tuple[str, str]:
     return url, key
 
 
+def _auth_headers(key: str) -> dict:
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Accept": "application/json",
+    }
+
+
+def _request(url: str, headers: dict) -> tuple[int, object, bytes]:
+    """GET a URL. Returns (status, headers, body). HTTPError is unwrapped;
+    network failures (URLError) propagate to the caller."""
+    req = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.status, resp.headers, resp.read()
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.headers, exc.read()
+
+
 def _fmt_type(prop: dict) -> str:
     """Render a column type from an OpenAPI property definition."""
     # PostgREST puts the real Postgres type in `format`; `type` is the JSON type.
@@ -90,64 +107,55 @@ def _key_note(description: str) -> str:
     if "<pk/>" in description or "Primary Key" in description:
         notes.append("PK")
     if "<fk " in description or "Foreign Key" in description:
-        # description form: "...Foreign Key to `public.teams.team_id`.<fk .../>"
-        target = ""
-        if "`" in description:
-            parts = description.split("`")
-            if len(parts) >= 2:
-                target = parts[1]
+        # form: "...Foreign Key to `public.teams.team_id`.<fk .../>"
+        target = description.split("`")[1] if "`" in description else ""
         notes.append(f"FK->{target}" if target else "FK")
     return " ".join(notes)
 
 
-def _row_count(client: httpx.Client, url: str, table: str) -> int | None:
+def _row_count(url: str, key: str, table: str) -> int | None:
     """Exact row count via the Content-Range header; None if unavailable."""
+    headers = _auth_headers(key)
+    headers["Prefer"] = "count=exact"
+    full = f"{url}/rest/v1/{urllib.parse.quote(table)}?limit=0"
     try:
-        resp = client.get(
-            f"{url}/rest/v1/{table}",
-            params={"limit": 0},
-            headers={"Prefer": "count=exact"},
-        )
-    except httpx.HTTPError as exc:
+        status, resp_headers, _ = _request(full, headers)
+    except urllib.error.URLError as exc:
         print(f"  ! count failed for {table}: {exc}", file=sys.stderr)
         return None
-    if resp.status_code not in (200, 206):
-        print(
-            f"  ! count failed for {table}: HTTP {resp.status_code}",
-            file=sys.stderr,
-        )
+    if status not in (200, 206):
+        print(f"  ! count failed for {table}: HTTP {status}", file=sys.stderr)
         return None
-    content_range = resp.headers.get("content-range", "")
-    total = content_range.rsplit("/", 1)[-1] if "/" in content_range else ""
-    return int(total) if total.isdigit() else None
+    content_range = resp_headers.get("Content-Range", "") or ""
+    tail = content_range.rsplit("/", 1)[-1] if "/" in content_range else ""
+    return int(tail) if tail.isdigit() else None
 
 
 def inspect(url: str, key: str) -> dict:
-    headers = {"apikey": key, "Authorization": f"Bearer {key}"}
-    with httpx.Client(headers=headers, timeout=30.0) as client:
-        resp = client.get(f"{url}/rest/v1/")
-        resp.raise_for_status()
-        spec = resp.json()
-        definitions = spec.get("definitions", {})
+    status, _, body = _request(f"{url}/rest/v1/", _auth_headers(key))
+    if status != 200:
+        snippet = body[:300].decode("utf-8", "replace")
+        sys.exit(f"PostgREST root returned HTTP {status}: {snippet}")
+    definitions = json.loads(body).get("definitions", {})
 
-        relations: list[dict] = []
-        for name in sorted(definitions):
-            props: dict = definitions[name].get("properties", {})
-            columns = [
-                {
-                    "name": col,
-                    "type": _fmt_type(meta),
-                    "keys": _key_note(meta.get("description", "")),
-                }
-                for col, meta in props.items()
-            ]
-            relations.append(
-                {
-                    "name": name,
-                    "row_count": _row_count(client, url, name),
-                    "columns": columns,
-                }
-            )
+    relations: list[dict] = []
+    for name in sorted(definitions):
+        props: dict = definitions[name].get("properties", {})
+        columns = [
+            {
+                "name": col,
+                "type": _fmt_type(meta),
+                "keys": _key_note(meta.get("description", "")),
+            }
+            for col, meta in props.items()
+        ]
+        relations.append(
+            {
+                "name": name,
+                "row_count": _row_count(url, key, name),
+                "columns": columns,
+            }
+        )
     return {"supabase_url": url, "relation_count": len(relations), "relations": relations}
 
 
@@ -170,15 +178,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true", help="emit JSON instead of text")
     args = parser.parse_args(argv)
 
-    _load_env()
+    _load_env_file()
     url, key = _require_env()
 
     try:
         result = inspect(url, key)
-    except httpx.HTTPStatusError as exc:
-        return _fail(f"PostgREST returned HTTP {exc.response.status_code}: {exc}")
-    except httpx.HTTPError as exc:
-        return _fail(f"could not reach Supabase: {exc}")
+    except urllib.error.URLError as exc:
+        print(f"error: could not reach Supabase: {exc}", file=sys.stderr)
+        return 1
 
     if args.json:
         json.dump(result, sys.stdout, indent=2, default=str)
@@ -186,11 +193,6 @@ def main(argv: list[str] | None = None) -> int:
     else:
         _print_report(result)
     return 0
-
-
-def _fail(msg: str) -> int:
-    print(f"error: {msg}", file=sys.stderr)
-    return 1
 
 
 if __name__ == "__main__":
