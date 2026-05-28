@@ -19,6 +19,10 @@ from selectolax.parser import HTMLParser, Node
 
 BASE_URL = "https://escharts.com"
 _DATE_RE = re.compile(r"(\d{2})\.(\d{2})\.(\d{2})")
+_STATUS = "(?:LIVE|Ongoing|Finished|Upcoming)"
+# Only strip status badges glued at the very start/end so a substring
+# inside a real name (e.g. the "LIVE" in "Deliverance") is left alone.
+_STATUS_RE = re.compile(rf"^(?:{_STATUS})+|(?:{_STATUS})+$", re.IGNORECASE)
 
 
 def _text(node: Optional[Node]) -> Optional[str]:
@@ -72,6 +76,13 @@ def _parse_date_range(text: Optional[str]) -> tuple[Optional[str], Optional[str]
     return (iso(found[0]), iso(found[1]) if len(found) > 1 else None)
 
 
+def _clean_name(name: Optional[str]) -> Optional[str]:
+    """Strip a glued status badge (Ongoing/LIVE/...) off a tournament name."""
+    if not name:
+        return None
+    return _STATUS_RE.sub("", name).strip() or None
+
+
 def _detail_anchors(tr: Node) -> list[Node]:
     """Row anchors that point at a tournament detail page (game/slug)."""
     out = []
@@ -104,6 +115,7 @@ def parse_tournament_list(html: str) -> list[dict]:
         cell_texts = [_text(c) or "" for c in tr.css("td")]
         if name is None:
             name = _name_from_blob(cell_texts[0] if cell_texts else None)
+        name = _clean_name(name)
 
         peak = next((c for c in cell_texts if c.rstrip().endswith("PV")), None)
         hours = next((c for c in cell_texts if c.rstrip().endswith("HW")), None)
