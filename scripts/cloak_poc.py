@@ -63,28 +63,43 @@ TARGETS = {
         "expect_any": ["Natus Vincere", "navi", "Maps played", "core-overview"],
     },
     "escharts": {
-        "url": "https://escharts.com/tournaments/cs2",
-        "expect_any": ["tournament", "viewers", "Peak", "hours watched"],
+        # NB: the old /tournaments/cs2 list path now returns an app-level
+        # "Page not found" (the escharts_parser URL is stale and needs its
+        # own fix). The homepage is a stable target that proves WAF-pierce.
+        "url": "https://escharts.com/",
+        "expect_any": ["esports charts", "tournaments", "viewers", "most watched"],
     },
 }
 
-# Markers that mean Cloudflare (or another WAF) is still in the way.
-_CHALLENGE_MARKERS = (
+# The Cloudflare interstitial is a SMALL page whose <title> is one of
+# these. We deliberately do NOT treat bare "turnstile" /
+# "challenge-platform" substrings as a block: those are benign
+# cdn-cgi script tags Cloudflare injects on EVERY page it fronts,
+# present even after a successful pass (this caused a false BLOCKED on
+# the 11 MB real HLTV page in the first run).
+_INTERSTITIAL_TITLES = (
     "just a moment",
-    "cf-challenge",
-    "challenge-platform",
-    "cf_chl_opt",
     "attention required",
-    "turnstile",
+    "access denied",
     "checking your browser",
-    "_cf_chl",
-    "enable javascript and cookies to continue",
+    "verifying you are human",
 )
+
+_TITLE_RE = __import__("re").compile(r"<title[^>]*>(.*?)</title>", __import__("re").S)
 
 
 def _classify(html: str, expect_any: list[str]) -> str:
     low = html.lower()
-    if any(m in low for m in _CHALLENGE_MARKERS):
+    m = _TITLE_RE.search(low)
+    title = (m.group(1).strip() if m else "")
+    # A real challenge is small AND titled like an interstitial (or carries
+    # the cf_chl challenge token in a small body). Big pages with real
+    # content are never the interstitial.
+    is_interstitial = (
+        any(t in title for t in _INTERSTITIAL_TITLES)
+        or ("cf_chl" in low and len(html) < 50_000)
+    )
+    if is_interstitial:
         return "BLOCKED"
     if any(s.lower() in low for s in expect_any):
         return "PASS"
