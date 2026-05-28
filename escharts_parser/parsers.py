@@ -162,6 +162,52 @@ def _name_from_blob(blob: Optional[str]) -> Optional[str]:
     return name or None
 
 
+def _headline_viewers(tree: HTMLParser) -> tuple[Optional[int], Optional[int], Optional[int]]:
+    """Pull peak / hours-watched / average viewers from the header stats.
+
+    EsportsCharts labels these with icons (no text) and hides the rest
+    behind a JS switcher, so we classify by magnitude instead: viewer-hours
+    are always far larger than peak concurrent viewers, which in turn exceed
+    the average — i.e. sorted descending the figures are hours, peak, avg.
+    A ``$`` figure shown alongside them is a different metric and skipped.
+    """
+    vals: list[int] = []
+    for sp in tree.css("[class]"):
+        cls = sp.attributes.get("class") or ""
+        if not ("font-bold" in cls and "text-default" in cls and "text-right" in cls):
+            continue
+        own = sp.text(deep=False, strip=True)
+        if not own or own.startswith("$") or any(c.isalpha() for c in own):
+            continue
+        v = _parse_compact_number(own)
+        if v is not None:
+            vals.append(v)
+    vals = sorted(set(vals), reverse=True)
+    hours = vals[0] if len(vals) >= 1 else None
+    peak = vals[1] if len(vals) >= 2 else None
+    avg = vals[2] if len(vals) >= 3 else None
+    return peak, hours, avg
+
+
+def _about_facts(tree: HTMLParser) -> dict:
+    """Label->value pairs from the tournament ``about-table`` (Prize Pool,
+    Date, Discipline, and whatever else the page lists)."""
+    facts: dict = {}
+    for table in tree.css("table"):
+        if "about-table" not in (table.attributes.get("class") or ""):
+            continue
+        for tr in table.css("tr"):
+            cells = tr.css("td, th")
+            if len(cells) < 2:
+                continue
+            label = (_text(cells[0]) or "").rstrip(":").strip().lower()
+            value = _text(cells[1])
+            if label and value:
+                facts[label] = value
+        break
+    return facts
+
+
 def parse_tournament_detail(html: str) -> dict:
     """Parse a single tournament page at ``/tournaments/<game>/<slug>``."""
     tree = HTMLParser(html)
@@ -171,47 +217,20 @@ def parse_tournament_detail(html: str) -> dict:
         # h1 reads "IEM Atlanta 2026/ Statistics" — drop the page-section suffix.
         name = re.sub(r"\s*/\s*Statistics\s*$", "", name).strip() or None
 
-    stats: dict = {"tournament": name}
-    for card in tree.css(
-        ".stats-card, .stat-block, .tournament-stats .stat, .overview-stat"
-    ):
-        label = _text(card.css_first(".label, .title, .stat-label, .name"))
-        value = _text(card.css_first(".value, .number, .stat-value"))
-        if not label:
-            continue
-        key = label.lower()
-        if "peak" in key:
-            stats["peak_viewers_text"] = value
-            stats["peak_viewers"] = _parse_compact_number(value)
-        elif "avg" in key or "average" in key:
-            stats["avg_viewers_text"] = value
-            stats["avg_viewers"] = _parse_compact_number(value)
-        elif "hours watched" in key or "watch time" in key:
-            stats["hours_watched_text"] = value
-            stats["hours_watched"] = _parse_compact_number(value)
-        elif "airtime" in key or "broadcast" in key:
-            stats["airtime_text"] = value
-            stats["airtime_hours"] = _parse_airtime_hours(value)
-        elif "prize" in key:
-            stats["prize_pool_text"] = value
-            stats["prize_pool"] = _parse_compact_number(value)
+    peak, hours, avg = _headline_viewers(tree)
+    facts = _about_facts(tree)
+    prize_text = facts.get("prize pool")
+    start, end = _parse_date_range(facts.get("date"))
 
-    channels: list[dict] = []
-    for row in tree.css(".channel-row, .channels-table tbody tr"):
-        ch_name = _text(row.css_first(".channel-name, td.name, .name"))
-        ch_peak = _text(row.css_first(".peak, [data-metric*='peak']"))
-        ch_hours = _text(row.css_first(".hours, [data-metric*='hours']"))
-        if ch_name:
-            channels.append(
-                {
-                    "channel": ch_name,
-                    "peak_viewers_text": ch_peak,
-                    "peak_viewers": _parse_compact_number(ch_peak),
-                    "hours_watched_text": ch_hours,
-                    "hours_watched": _parse_compact_number(ch_hours),
-                }
-            )
-    if channels:
-        stats["channels"] = channels
-
-    return stats
+    return {
+        "tournament": name,
+        "discipline": facts.get("discipline"),
+        "peak_viewers": peak,
+        "avg_viewers": avg,
+        "hours_watched": hours,
+        "prize_pool_text": prize_text,
+        "prize_pool": _parse_compact_number(prize_text),
+        "start_date": start,
+        "end_date": end,
+        "facts": facts,
+    }
