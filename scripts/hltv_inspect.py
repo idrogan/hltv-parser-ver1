@@ -103,6 +103,25 @@ def main() -> int:
             if txt and len(txt) <= 40:
                 print(f"  .{cell.attributes.get('class')}: {txt!r}")
 
+    print("\n== anchors to /stats/teams/map/ (per-map detail links) ==")
+    seen_href = set()
+    for a in t.css("a[href*='/stats/teams/map/']"):
+        href = a.attributes.get("href") or ""
+        if href in seen_href:
+            continue
+        seen_href.add(href)
+        print(f"  {a.text(strip=True)!r} -> {href}")
+
+    print("\n== .map-stats-infobox* (CT/T side block on detail page) ==")
+    for sel in (".map-stats-infobox-stat", ".map-stats-infobox"):
+        for box in t.css(sel):
+            label = box.css_first(".map-stats-infobox-type")
+            pct = box.css_first(".map-stats-infobox-stats-percentage")
+            if label or pct:
+                lt = label.text(strip=True) if label else None
+                pt = pct.text(strip=True) if pct else None
+                print(f"  [{sel}] {lt!r} -> {pt!r}")
+
     return 0
 
 

@@ -53,9 +53,10 @@ def team_map_stats(
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     months_back: Optional[int] = Query(None, ge=1, le=60),
+    with_sides: bool = Query(False, description="Add CT/T side round-win% (one fetch per played map)"),
 ) -> dict:
-    """Per-map stats including CT-side and T-side round winrate."""
-    return _service.team_map_stats(team_id, team_slug, start_date, end_date, months_back)
+    """Per-map stats; pass with_sides=true for CT-side and T-side round winrate."""
+    return _service.team_map_stats(team_id, team_slug, start_date, end_date, months_back, with_sides=with_sides)
 
 
 @router.get("/team/{team_id}/{team_slug}/matches", dependencies=[Depends(bearer_auth)])

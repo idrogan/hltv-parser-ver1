@@ -56,6 +56,9 @@ def _build_parser() -> argparse.ArgumentParser:
 
     p = h.add_parser("team"); p.add_argument("team_id", type=int); p.add_argument("slug"); _add_window(p)
     p = h.add_parser("team-maps"); p.add_argument("team_id", type=int); p.add_argument("slug"); _add_window(p)
+    p.add_argument("--with-sides", action="store_true", dest="with_sides",
+                   help="Follow each map's detail page to add CT/T side round-win%% "
+                        "(one extra fetch per played map).")
     p = h.add_parser("team-matches"); p.add_argument("team_id", type=int); p.add_argument("slug"); _add_window(p)
     p = h.add_parser("player"); p.add_argument("player_id", type=int); p.add_argument("slug"); _add_window(p)
     p = h.add_parser("search-team"); p.add_argument("name")
@@ -223,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.cmd == "team":
             return _print(svc.team_overview(args.team_id, args.slug, args.start_date, args.end_date, args.months_back))
         if args.cmd == "team-maps":
-            return _print(svc.team_map_stats(args.team_id, args.slug, args.start_date, args.end_date, args.months_back))
+            return _print(svc.team_map_stats(args.team_id, args.slug, args.start_date, args.end_date, args.months_back, with_sides=args.with_sides))
         if args.cmd == "team-matches":
             return _print(svc.team_matches(args.team_id, args.slug, args.start_date, args.end_date, args.months_back))
         if args.cmd == "player":

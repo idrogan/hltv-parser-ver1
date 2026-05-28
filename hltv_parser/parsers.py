@@ -193,6 +193,70 @@ def parse_team_map_stats(html: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Per-map detail links + CT/T side winrate
+#
+# CT/T side round-win% is not on the maps overview; it only lives on the
+# single-map team page /stats/teams/map/{mapId}/{teamId}/{slug}. The maps
+# overview renders a map switcher whose anchors point straight at those
+# pages, so we scrape the links rather than hardcode HLTV's map IDs.
+# ---------------------------------------------------------------------------
+def parse_team_map_links(html: str) -> list[dict]:
+    """Per-map detail links from the map-filter nav on a team stats page.
+
+    Returns ``{"map": name, "detail_url": url}`` rows, skipping the "All"
+    entry. De-duplicated by URL.
+    """
+    tree = HTMLParser(html)
+    out: list[dict] = []
+    seen: set[str] = set()
+    for a in tree.css("a[href*='/stats/teams/map/']"):
+        href = a.attributes.get("href") or ""
+        if "/stats/teams/map/" not in href:
+            continue
+        name = text_or_none(a)
+        if not name or name.lower() == "all":
+            continue
+        url = _abs(href)
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        out.append({"map": name, "detail_url": url})
+    return out
+
+
+def parse_team_map_detail(html: str) -> dict:
+    """CT/T side round-win% from the single-map team page.
+
+    Two layouts are tried: the ``.map-stats-infobox`` CT/T halves and the
+    ``.small-label-below`` / ``.large-strong`` fallback used elsewhere on
+    HLTV stat pages. Missing values stay ``None``.
+    """
+    tree = HTMLParser(html)
+    ct: Optional[float] = None
+    t: Optional[float] = None
+
+    for fact in tree.css(".map-stats-infobox-stat"):
+        label = (text_or_none(fact.css_first(".map-stats-infobox-type")) or "").lower()
+        value = text_or_none(fact.css_first(".map-stats-infobox-stats-percentage"))
+        if "ct" in label and "win" in label and ct is None:
+            ct = parse_percent(value)
+        elif "t" in label and "win" in label and "ct" not in label and t is None:
+            t = parse_percent(value)
+
+    if ct is None and t is None:
+        for label_node in tree.css(".small-label-below"):
+            label = (text_or_none(label_node) or "").lower()
+            sib = label_node.parent.css_first(".large-strong") if label_node.parent else None
+            value = text_or_none(sib)
+            if "ct" in label and ct is None:
+                ct = parse_percent(value)
+            elif "t side" in label and t is None:
+                t = parse_percent(value)
+
+    return {"ct_round_win_percent": ct, "t_round_win_percent": t}
+
+
+# ---------------------------------------------------------------------------
 # Team recent matches  -- /stats/teams/matches/{id}/{slug}
 # ---------------------------------------------------------------------------
 def parse_team_matches(html: str) -> list[dict]:
