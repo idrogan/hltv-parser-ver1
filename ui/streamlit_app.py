@@ -21,6 +21,7 @@ import os
 os.environ.setdefault("HLTV_ENABLED", "true")
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 st.set_page_config(page_title="Esports Data", layout="wide")
@@ -85,6 +86,45 @@ def liquipedia_service(min_delay: float):
 # --------------------------------------------------------------------------
 # Result rendering
 # --------------------------------------------------------------------------
+_DATE_HINTS = ("date", "time", "timestamp", "day", "month", "year")
+
+
+def chart_panel(df: pd.DataFrame, key: str) -> None:
+    """Generic Plotly chart builder for any tabular result.
+
+    Widget state lives in session_state, and the rendered result is
+    cached there too (see ``run``), so tweaking a chart control reruns
+    the script without re-fetching from the scraper.
+    """
+    if df.empty:
+        return
+    numeric = df.select_dtypes("number").columns.tolist()
+    if not numeric:
+        st.caption("No numeric columns to chart.")
+        return
+    cols = list(df.columns)
+    date_like = [c for c in cols if any(h in c.lower() for h in _DATE_HINTS)]
+    with st.expander("Chart"):
+        ctype = st.selectbox("Type", ["line", "bar", "scatter"], key=f"ct_{key}")
+        x_default = date_like[0] if date_like else cols[0]
+        x = st.selectbox("X axis", cols, index=cols.index(x_default), key=f"cx_{key}")
+        y_opts = [c for c in numeric if c != x]
+        if not y_opts:
+            st.caption("Pick an X that is not the only numeric column.")
+            return
+        y = st.multiselect("Y axis", y_opts, default=y_opts[:1], key=f"cy_{key}")
+        if not y:
+            return
+        plot_df = df.copy()
+        if x in date_like:
+            plot_df[x] = pd.to_datetime(plot_df[x], errors="coerce")
+            plot_df = plot_df.sort_values(x)
+        fig = {"line": px.line, "bar": px.bar, "scatter": px.scatter}[ctype](
+            plot_df, x=x, y=y
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+
 def _table(rows: list, key: str, label: str | None = None) -> None:
     if label:
         st.markdown(f"**{label}** ({len(rows)})")
@@ -95,6 +135,7 @@ def _table(rows: list, key: str, label: str | None = None) -> None:
             "Download CSV", df.to_csv(index=False).encode("utf-8"),
             f"{key}.csv", "text/csv", key=f"dl_{key}",
         )
+        chart_panel(df, key)
     else:
         st.write(rows)
 
@@ -116,13 +157,18 @@ def render(data) -> None:
 
 
 def run(fn, *args, **kwargs) -> None:
-    """Execute a service call with a spinner and friendly error surface."""
+    """Fetch, then stash the result in session_state so later reruns
+    (e.g. fiddling with chart controls) re-render without re-fetching."""
     try:
         with st.spinner("Fetching…"):
             data = fn(*args, **kwargs)
-        render(data)
     except Exception as exc:  # noqa: BLE001 - surface any scraper error in the UI
-        st.error(f"{type(exc).__name__}: {exc}")
+        st.session_state["error"] = f"{type(exc).__name__}: {exc}"
+        st.session_state["result"] = None
+    else:
+        st.session_state["result"] = data
+        st.session_state.pop("error", None)
+    st.session_state["result_source"] = source
 
 
 # --------------------------------------------------------------------------
@@ -317,3 +363,15 @@ elif source == "PandaScore (ETL)":
             tournaments_max_pages=int(t_pages), fetch_past_matches=past,
             fetch_upcoming_matches=upcoming, fetch_running_tournaments=running_t,
             fetch_upcoming_tournaments=upcoming_t)
+
+
+# --------------------------------------------------------------------------
+# Render the last result (kept in session_state so chart tweaks don't refetch).
+# Only shown for the source it came from, to avoid stale cross-source output.
+# --------------------------------------------------------------------------
+if st.session_state.get("result_source") == source:
+    st.divider()
+    if st.session_state.get("error"):
+        st.error(st.session_state["error"])
+    elif st.session_state.get("result") is not None:
+        render(st.session_state["result"])

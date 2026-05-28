@@ -2,4 +2,5 @@
 # <1.50 keeps Streamlit's tornado server; 1.50+ switched to a starlette
 # backend that conflicts with the starlette pinned by fastapi==0.115.6.
 streamlit>=1.33,<1.50
+plotly>=5.18
 pandas>=2.0
