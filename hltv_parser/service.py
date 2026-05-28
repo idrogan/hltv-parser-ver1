@@ -77,16 +77,16 @@ class HLTVService:
         data["slug"] = team_slug
         data["window"] = {"start": s, "end": e}
         if with_sides:
-            self._attach_side_winrates(html, data["maps"], s, e)
+            self._attach_side_winrates(html, data["maps"])
         return data
 
-    def _attach_side_winrates(
-        self, list_html: str, maps: list[dict], start: str, end: str
-    ) -> None:
+    def _attach_side_winrates(self, list_html: str, maps: list[dict]) -> None:
         """Fetch each played map's detail page and merge CT/T round-win%.
 
         Only maps present in ``maps`` are fetched (the ones with real data in
-        the window), so cold maps in the switcher cost nothing.
+        the window), so cold maps in the switcher cost nothing. The detail
+        links scraped off the maps page already carry the same
+        ``startDate``/``endDate``, so they're fetched as-is.
         """
         links = {
             row["map"].lower(): row["detail_url"]
@@ -97,7 +97,7 @@ class HLTVService:
             if not url:
                 continue
             try:
-                detail_html = self.client.get(url, params={"startDate": start, "endDate": end})
+                detail_html = self.client.get(url)
             except Exception as exc:  # noqa: BLE001 - one bad map shouldn't sink the rest
                 log.warning("event=hltv_map_detail_failed map=%s err=%s", m.get("map"), exc)
                 continue
