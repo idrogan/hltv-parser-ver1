@@ -31,10 +31,12 @@ from __future__ import annotations
 
 import atexit
 import logging
+import os
 import random
 import re
 import threading
 import time
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlencode, urljoin
 
@@ -156,6 +158,16 @@ class HLTVCloakClient:
             # Let any Turnstile / JS challenge auto-resolve before snapshot.
             page.wait_for_timeout(int(self.settle_s * 1000))
             html = page.content()
+            # Optional raw-HTML dump for selector debugging (off unless
+            # HLTV_CLOAK_DUMP_DIR is set). Dumped before the block check so
+            # a challenge page can be inspected too.
+            dump_dir = os.getenv("HLTV_CLOAK_DUMP_DIR")
+            if dump_dir:
+                d = Path(dump_dir)
+                d.mkdir(parents=True, exist_ok=True)
+                safe = re.sub(r"[^A-Za-z0-9]+", "_", path.strip("/")) or "index"
+                (d / f"{safe}.html").write_text(html, errors="replace")
+                log.info("event=hltv_cloak_dump file=%s", d / f"{safe}.html")
         finally:
             try:
                 page.close()
