@@ -75,12 +75,14 @@ class HLTVCloakClient:
         self,
         min_delay: float = 4.0,
         timeout: int = 60,
-        settle_s: float = 6.0,
+        settle_s: float = 2.0,
+        challenge_wait_s: float = 30.0,
         headless: bool = True,
     ):
         self.min_delay = min_delay
         self.timeout = timeout            # seconds
-        self.settle_s = settle_s
+        self.settle_s = settle_s          # initial paint settle before polling
+        self.challenge_wait_s = challenge_wait_s  # max time to let a challenge clear
         self.headless = headless
         self._last_request_at = 0.0
         self._lock = threading.Lock()
@@ -121,6 +123,39 @@ class HLTVCloakClient:
             except Exception:
                 pass
 
+    def _await_clearance(self, page, url: str) -> str:
+        """Wait for a Cloudflare challenge to auto-resolve.
+
+        Turnstile / managed challenges clear in anywhere from <1s to
+        ~20s and the timing is non-deterministic per request. A fixed
+        sleep is wrong in both directions: too short and we snapshot the
+        interstitial, too long and every clean request pays for the
+        worst case. So we poll the DOM and return the instant it stops
+        looking like a challenge — with one hard reload as a fallback,
+        since a stuck challenge often clears on a second navigation.
+        """
+        page.wait_for_timeout(int(self.settle_s * 1000))
+        html = page.content()
+        deadline = time.monotonic() + self.challenge_wait_s
+        while _looks_blocked(html) and time.monotonic() < deadline:
+            page.wait_for_timeout(1500)
+            html = page.content()
+
+        if _looks_blocked(html):
+            log.info("event=hltv_cloak_reload url=%s", url)
+            try:
+                page.goto(url, timeout=self.timeout * 1000,
+                          wait_until="domcontentloaded")
+            except Exception:
+                pass
+            page.wait_for_timeout(2000)
+            html = page.content()
+            end2 = time.monotonic() + min(15.0, self.challenge_wait_s)
+            while _looks_blocked(html) and time.monotonic() < end2:
+                page.wait_for_timeout(1500)
+                html = page.content()
+        return html
+
     def get(
         self,
         path: str,
@@ -155,9 +190,8 @@ class HLTVCloakClient:
             except Exception as exc:
                 raise HLTVBlockedError(f"navigation error: {exc}") from exc
 
-            # Let any Turnstile / JS challenge auto-resolve before snapshot.
-            page.wait_for_timeout(int(self.settle_s * 1000))
-            html = page.content()
+            # Poll until any Turnstile / JS challenge clears (or give up).
+            html = self._await_clearance(page, url)
             # Optional raw-HTML dump for selector debugging (off unless
             # HLTV_CLOAK_DUMP_DIR is set). Dumped before the block check so
             # a challenge page can be inspected too.
