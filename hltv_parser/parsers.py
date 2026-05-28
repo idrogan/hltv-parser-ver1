@@ -131,7 +131,11 @@ def parse_team_map_stats(html: str) -> dict:
             elif "t" in label and "win" in label and "ct" not in label:
                 stats["t_round_win_percent"] = parse_percent(value)
 
-        maps.append(stats)
+        # Skip name-only matches from the top map-pool filter widget
+        # (which also glues a percent onto the highlighted map, e.g.
+        # "Train - 100.0%"). Keep only boxes carrying real per-map stats.
+        if len(stats) > 1:
+            maps.append(stats)
 
     overall_ct = None
     overall_t = None
