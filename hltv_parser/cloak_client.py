@@ -129,6 +129,28 @@ class CloakClient:
             except Exception:
                 pass
 
+    def _safe_content(self, page) -> str:
+        """``page.content()`` tolerant of Cloudflare mid-navigation reloads.
+
+        The challenge page navigates itself while clearing, and Playwright
+        raises "Unable to retrieve content because the page is navigating"
+        if ``content()`` lands in that window. Retry briefly; if it never
+        settles, raise so ``get()``'s HLTVBlockedError retry re-navigates.
+        """
+        last_exc: Optional[Exception] = None
+        for _ in range(6):
+            try:
+                return page.content()
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                if "navigating" not in str(exc).lower():
+                    raise
+                try:
+                    page.wait_for_load_state("domcontentloaded", timeout=5000)
+                except Exception:
+                    page.wait_for_timeout(800)
+        raise HLTVBlockedError(f"page kept navigating, no stable content: {last_exc}")
+
     def _await_clearance(self, page, url: str) -> str:
         """Wait for a Cloudflare challenge to auto-resolve.
 
@@ -141,11 +163,11 @@ class CloakClient:
         since a stuck challenge often clears on a second navigation.
         """
         page.wait_for_timeout(int(self.settle_s * 1000))
-        html = page.content()
+        html = self._safe_content(page)
         deadline = time.monotonic() + self.challenge_wait_s
         while _looks_blocked(html) and time.monotonic() < deadline:
             page.wait_for_timeout(1500)
-            html = page.content()
+            html = self._safe_content(page)
 
         if _looks_blocked(html):
             log.info("event=hltv_cloak_reload url=%s", url)
@@ -155,11 +177,11 @@ class CloakClient:
             except Exception:
                 pass
             page.wait_for_timeout(2000)
-            html = page.content()
+            html = self._safe_content(page)
             end2 = time.monotonic() + min(15.0, self.challenge_wait_s)
             while _looks_blocked(html) and time.monotonic() < end2:
                 page.wait_for_timeout(1500)
-                html = page.content()
+                html = self._safe_content(page)
         return html
 
     def get(
