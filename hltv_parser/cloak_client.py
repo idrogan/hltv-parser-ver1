@@ -182,6 +182,16 @@ class CloakClient:
             while _looks_blocked(html) and time.monotonic() < end2:
                 page.wait_for_timeout(1500)
                 html = self._safe_content(page)
+
+        # Once past any challenge, let client-side rendering settle so we
+        # snapshot the full DOM, not a pre-hydration shell (escharts detail
+        # pages fill in after load and were occasionally captured near-empty).
+        if not _looks_blocked(html):
+            try:
+                page.wait_for_load_state("networkidle", timeout=8000)
+                html = self._safe_content(page)
+            except Exception:
+                pass
         return html
 
     def get(
