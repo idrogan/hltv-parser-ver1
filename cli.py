@@ -13,8 +13,8 @@ Examples
     python cli.py steam search "Katowice 2014 Holo" --count 30
     python cli.py steam history "AK-47 | Redline (Field-Tested)"   # requires cookie
 
-    python cli.py escharts tournaments --game cs2
-    python cli.py escharts tournament cs2 iem-katowice-2024
+    python cli.py escharts tournaments --game csgo
+    python cli.py escharts tournament csgo intel-extreme-masters-atlanta-2026
 """
 from __future__ import annotations
 
@@ -116,7 +116,9 @@ def _build_parser() -> argparse.ArgumentParser:
     e = esc.add_subparsers(dest="cmd", required=True)
 
     p = e.add_parser("tournaments")
-    p.add_argument("--game", default="cs2")
+    p.add_argument("--game", default="csgo",
+                   help="EsportsCharts game slug. Counter-Strike (incl. CS2) lives "
+                        "under 'csgo'. Others: dota2, lol, valorant, pubg, rl, ...")
     p.add_argument("--year", type=int, default=None)
 
     p = e.add_parser("tournament")

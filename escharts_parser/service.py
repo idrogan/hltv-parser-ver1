@@ -11,11 +11,12 @@ class EsChartsService:
     def __init__(self, client: Optional[EsChartsClient] = None):
         self.client = client or EsChartsClient()
 
-    def tournaments(self, game: str = "cs2", year: Optional[int] = None) -> list[dict]:
+    def tournaments(self, game: str = "csgo", year: Optional[int] = None) -> list[dict]:
         """List tournaments (most-viewed first) for a game.
 
-        ``game`` values seen in the wild include ``cs2``, ``csgo``,
-        ``dota2``, ``lol``, ``valorant``, ``pubg``.
+        Counter-Strike (including CS2-era events) lives under ``csgo`` on
+        EsportsCharts; ``cs2`` is a 404. Other slugs: ``dota2``, ``lol``,
+        ``valorant``, ``pubg``, ``rl``.
         """
         path = f"/tournaments/{game}"
         params = {"year": year} if year else None

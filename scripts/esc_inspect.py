@@ -65,13 +65,11 @@ def main() -> int:
             print("  ...(truncated at 40)")
             break
 
-    print("\n== short text nodes mentioning Peak/Avg/Hours/Airtime/Prize ==")
+    print("\n== own-text nodes mentioning Peak/Avg/Hours/Airtime/Prize ==")
     kws = ("peak", "average", "avg", "hours", "watch", "airtime", "air time", "prize")
     hits = 0
-    for n in t.css("*"):
-        if n.child is not None:
-            continue
-        txt = n.text(strip=True)
+    for n in t.css("[class]"):
+        txt = n.text(deep=False, strip=True)
         if not txt or len(txt) > 40:
             continue
         low = txt.lower()
@@ -91,7 +89,7 @@ def main() -> int:
             if txt:
                 print(f"  <{sel} class={n.attributes.get('class')}> {txt[:60]!r}")
 
-    print("\n== densest table: first rows anatomy (leaf tag.class : text) ==")
+    print("\n== densest table: first rows anatomy ==")
     tables = t.css("table")
     if tables:
         dense = max(tables, key=lambda tb: len(tb.css("tr")))
@@ -99,15 +97,18 @@ def main() -> int:
         print(f"  (table rows={len(rows)})")
         for ri, tr in enumerate(rows[:3]):
             print(f"  --- row[{ri}] ---")
+            for a in tr.css("a"):
+                href = a.attributes.get("href") or ""
+                txt = a.text(strip=True)
+                if href or txt:
+                    print(f"    a href={href[:60]!r} text={txt[:40]!r}")
             for td_i, td in enumerate(tr.css("td, th")):
-                print(f"    td[{td_i}]:")
-                for leaf in td.css("*"):
-                    if leaf.child is not None:
-                        continue
-                    txt = leaf.text(strip=True)
-                    if not txt or len(txt) > 50:
-                        continue
-                    print(f"      <{leaf.tag} .{leaf.attributes.get('class')}> {txt!r}")
+                print(f"    td[{td_i}]: {td.text(strip=True)[:45]!r}")
+                for el in td.css("[class]"):
+                    own = el.text(deep=False, strip=True)
+                    if own and len(own) <= 40:
+                        cls = (el.attributes.get("class") or "")[:34]
+                        print(f"        <{el.tag} .{cls}> {own!r}")
 
     return 0
 
