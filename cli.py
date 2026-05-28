@@ -45,6 +45,13 @@ def _build_parser() -> argparse.ArgumentParser:
     hltv = sources.add_parser("hltv", help="HLTV.org")
     hltv.add_argument("--min-delay", type=float, default=2.0)
     hltv.add_argument("--proxy", default=None)
+    hltv.add_argument(
+        "--backend",
+        choices=("curl", "cloak"),
+        default=os.getenv("HLTV_FETCH_BACKEND", "curl"),
+        help="Fetch transport: 'curl' (curl_cffi, WAF-blocked) or 'cloak' "
+             "(CloakBrowser stealth Chromium). Default from HLTV_FETCH_BACKEND.",
+    )
     h = hltv.add_subparsers(dest="cmd", required=True)
 
     p = h.add_parser("team"); p.add_argument("team_id", type=int); p.add_argument("slug"); _add_window(p)
@@ -207,7 +214,12 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 3
-        svc = HLTVService(HLTVClient(min_delay=args.min_delay, proxy=args.proxy))
+        if args.backend == "cloak":
+            from hltv_parser.cloak_client import HLTVCloakClient
+            client = HLTVCloakClient(min_delay=max(args.min_delay, 4.0))
+        else:
+            client = HLTVClient(min_delay=args.min_delay, proxy=args.proxy)
+        svc = HLTVService(client)
         if args.cmd == "team":
             return _print(svc.team_overview(args.team_id, args.slug, args.start_date, args.end_date, args.months_back))
         if args.cmd == "team-maps":
