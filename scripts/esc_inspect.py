@@ -17,6 +17,7 @@ Prints compact, paste-friendly signal:
 """
 from __future__ import annotations
 
+import re
 import sys
 from collections import Counter
 
@@ -89,26 +90,47 @@ def main() -> int:
             if txt:
                 print(f"  <{sel} class={n.attributes.get('class')}> {txt[:60]!r}")
 
-    print("\n== densest table: first rows anatomy ==")
-    tables = t.css("table")
-    if tables:
-        dense = max(tables, key=lambda tb: len(tb.css("tr")))
-        rows = dense.css("tr")
-        print(f"  (table rows={len(rows)})")
+    print("\n== all tables: class + first rows ==")
+    for ti, table in enumerate(t.css("table")):
+        rows = table.css("tr")
+        cls = table.attributes.get("class")
+        print(f"  table[{ti}] class={cls!r} rows={len(rows)}")
         for ri, tr in enumerate(rows[:3]):
-            print(f"  --- row[{ri}] ---")
-            for a in tr.css("a"):
-                href = a.attributes.get("href") or ""
-                txt = a.text(strip=True)
-                if href or txt:
-                    print(f"    a href={href[:60]!r} text={txt[:40]!r}")
-            for td_i, td in enumerate(tr.css("td, th")):
-                print(f"    td[{td_i}]: {td.text(strip=True)[:45]!r}")
-                for el in td.css("[class]"):
-                    own = el.text(deep=False, strip=True)
-                    if own and len(own) <= 40:
-                        cls = (el.attributes.get("class") or "")[:34]
-                        print(f"        <{el.tag} .{cls}> {own!r}")
+            cells = [c.text(strip=True)[:30] for c in tr.css("td, th")]
+            print(f"    row[{ri}]: {cells}")
+
+    print("\n== viewer-like numeric own-text nodes (class ^parent) ==")
+    num_re = re.compile(r"^\$?\s*\d[\d\s.,]*\s*[KMBkmb]?$")
+    seen = 0
+    for n in t.css("[class]"):
+        own = n.text(deep=False, strip=True)
+        if not own or len(own) > 16:
+            continue
+        if num_re.match(own) and sum(ch.isdigit() for ch in own) >= 3:
+            par = n.parent
+            pcls = par.attributes.get("class") if par else None
+            print(f"  <{n.tag} .{n.attributes.get('class')}> {own!r}  ^parent .{pcls}")
+            seen += 1
+            if seen >= 60:
+                print("  ...(truncated at 60)")
+                break
+
+    print("\n== 'Overall statistics' block (own-text of container descendants) ==")
+    target = None
+    for n in t.css("h1, h2, h3, div, span"):
+        if (n.text(strip=True) or "").lower().startswith("overall statistics"):
+            target = n
+            break
+    if target is not None:
+        container = target.parent.parent if (target.parent and target.parent.parent) else target.parent
+        if container is not None:
+            for el in container.css("[class]"):
+                own = el.text(deep=False, strip=True)
+                if own and len(own) <= 40:
+                    cls = (el.attributes.get("class") or "")[:34]
+                    print(f"  <{el.tag} .{cls}> {own!r}")
+    else:
+        print("  (no 'Overall statistics' heading found)")
 
     return 0
 
