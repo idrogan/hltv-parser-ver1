@@ -112,6 +112,30 @@ def main() -> int:
         seen_href.add(href)
         print(f"  {a.text(strip=True)!r} -> {href}")
 
+    print("\n== hrefs inside the map switcher (.stats-sub-map-grid / .stats-sub-map) ==")
+    seen_sw = set()
+    for sel in (".stats-sub-map-grid a", ".stats-sub-map a", ".stats-sub-map"):
+        for a in t.css(sel):
+            href = a.attributes.get("href")
+            if not href or href in seen_sw:
+                continue
+            seen_sw.add(href)
+            print(f"  {a.text(strip=True)!r} -> {href}")
+
+    print("\n== all distinct /stats/teams/ hrefs (first 40) ==")
+    seen_t = set()
+    n_t = 0
+    for a in t.css("a[href*='/stats/teams/']"):
+        href = a.attributes.get("href") or ""
+        if href in seen_t:
+            continue
+        seen_t.add(href)
+        print(f"  {a.text(strip=True)!r} -> {href}")
+        n_t += 1
+        if n_t >= 40:
+            print("  ...(truncated at 40)")
+            break
+
     print("\n== .map-stats-infobox* (CT/T side block on detail page) ==")
     for sel in (".map-stats-infobox-stat", ".map-stats-infobox"):
         for box in t.css(sel):
