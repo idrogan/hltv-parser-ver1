@@ -115,6 +115,28 @@ def main() -> int:
                 print("  ...(truncated at 60)")
                 break
 
+    print("\n== headline stat containers (value + sibling label) ==")
+    shown = 0
+    for n in t.css("[class]"):
+        cls = n.attributes.get("class") or ""
+        if not ("text-default" in cls and "text-right" in cls and "font-bold" in cls):
+            continue
+        own = n.text(deep=False, strip=True)
+        if not (own and num_re.match(own) and sum(ch.isdigit() for ch in own) >= 3):
+            continue
+        box = n.parent.parent if (n.parent and n.parent.parent) else n.parent
+        if box is None:
+            continue
+        texts = []
+        for el in box.css("[class]"):
+            ot = el.text(deep=False, strip=True)
+            if ot and len(ot) <= 40:
+                texts.append(ot)
+        print(f"  value={own!r} -> box own-texts: {texts[:10]}")
+        shown += 1
+        if shown >= 8:
+            break
+
     print("\n== 'Overall statistics' block (own-text of container descendants) ==")
     target = None
     for n in t.css("h1, h2, h3, div, span"):
