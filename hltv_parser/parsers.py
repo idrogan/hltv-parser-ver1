@@ -108,7 +108,13 @@ def parse_team_map_stats(html: str) -> dict:
                 continue
             key = (text_or_none(spans[0]) or "").lower()
             val = text_or_none(spans[-1])
-            if "win rate" in key:
+            # Order matters: the first-kill / first-death keys contain
+            # "win-%" so they must be matched before the bare "win rate".
+            if "first kill" in key:
+                stats["round_win_pct_after_first_kill"] = parse_percent(val)
+            elif "first death" in key:
+                stats["round_win_pct_after_first_death"] = parse_percent(val)
+            elif "win rate" in key:
                 stats["win_rate_percent"] = parse_percent(val)
             elif "wins / draws / losses" in key or "w / d / l" in key:
                 stats["wdl"] = val
@@ -116,10 +122,10 @@ def parse_team_map_stats(html: str) -> dict:
                 stats["rounds_played"] = parse_int(val)
             elif "rounds won" in key:
                 stats["rounds_won"] = parse_int(val)
-            elif key == "ct" or key.startswith("ct ") or key.endswith(" ct"):
-                stats["ct_round_win_percent"] = parse_percent(val)
-            elif key == "t" or key.startswith("t ") or key.endswith(" t"):
-                stats["t_round_win_percent"] = parse_percent(val)
+            elif "pick %" in key:
+                stats["pick_percent"] = parse_percent(val)
+            elif "ban %" in key:
+                stats["ban_percent"] = parse_percent(val)
             elif "times played" in key:
                 stats["times_played"] = parse_int(val)
 
