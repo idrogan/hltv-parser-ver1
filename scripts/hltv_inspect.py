@@ -14,6 +14,12 @@ Prints compact, paste-friendly signal:
      CT/T side data lives in stats-rows and under which key
   4. short text nodes mentioning CT / T side + their parent class —
      finds where the side win% actually sits in the current DOM
+  5. .standard-box highlight pairs (label -> value) exactly as the
+     overview parser reads them — shows why aggregate stats parse null
+  6. raw .small-label-below / .large-strong text — catches the case
+     where the label/value are not nested the way the parser expects
+  7. .stats-sub-map-grid text — the per-map breakdown that actually
+     ships on the overview page
 """
 from __future__ import annotations
 
@@ -73,6 +79,29 @@ def main() -> int:
             if hits >= 60:
                 print("  ...(truncated at 60)")
                 break
+
+    print("\n== .standard-box highlight pairs (label -> value) ==")
+    for box in t.css(".standard-box .col, .standard-box .columns .col"):
+        label = box.css_first(".small-label-below")
+        value = box.css_first(".large-strong")
+        if label or value:
+            lt = label.text(strip=True) if label else None
+            vt = value.text(strip=True) if value else None
+            print(f"  {lt!r} -> {vt!r}")
+
+    print("\n== raw .small-label-below / .large-strong text ==")
+    for sel in (".small-label-below", ".large-strong"):
+        vals = [n.text(strip=True) for n in t.css(sel)]
+        vals = [v for v in vals if v][:20]
+        print(f"  {sel}: {vals}")
+
+    print("\n== .stats-sub-map-grid text ==")
+    grid = t.css_first(".stats-sub-map-grid")
+    if grid is not None:
+        for cell in grid.css("[class]"):
+            txt = cell.text(strip=True)
+            if txt and len(txt) <= 40:
+                print(f"  .{cell.attributes.get('class')}: {txt!r}")
 
     return 0
 
