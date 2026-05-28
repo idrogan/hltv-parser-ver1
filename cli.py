@@ -106,6 +106,13 @@ def _build_parser() -> argparse.ArgumentParser:
     esc = sources.add_parser("escharts", help="EsportsCharts.com viewership")
     esc.add_argument("--min-delay", type=float, default=2.0)
     esc.add_argument("--proxy", default=None)
+    esc.add_argument(
+        "--backend",
+        choices=("curl", "cloak"),
+        default=os.getenv("ESCHARTS_FETCH_BACKEND", "curl"),
+        help="Fetch transport: 'curl' (curl_cffi) or 'cloak' (CloakBrowser "
+             "stealth Chromium, pierces Cloudflare). Default from ESCHARTS_FETCH_BACKEND.",
+    )
     e = esc.add_subparsers(dest="cmd", required=True)
 
     p = e.add_parser("tournaments")
@@ -218,8 +225,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 3
         if args.backend == "cloak":
-            from hltv_parser.cloak_client import HLTVCloakClient
-            client = HLTVCloakClient(min_delay=max(args.min_delay, 4.0))
+            from hltv_parser.cloak_client import CloakClient
+            client = CloakClient(min_delay=max(args.min_delay, 4.0))
         else:
             client = HLTVClient(min_delay=args.min_delay, proxy=args.proxy)
         svc = HLTVService(client)
@@ -351,8 +358,18 @@ def main(argv: list[str] | None = None) -> int:
             ))
 
     if args.source == "escharts":
-        from escharts_parser import EsChartsClient, EsChartsService
-        svc = EsChartsService(EsChartsClient(min_delay=args.min_delay, proxy=args.proxy))
+        from escharts_parser import EsChartsService
+        if args.backend == "cloak":
+            from hltv_parser.cloak_client import CloakClient
+            client = CloakClient(
+                min_delay=max(args.min_delay, 4.0),
+                base_url="https://escharts.com",
+                dump_env="ESCHARTS_CLOAK_DUMP_DIR",
+            )
+        else:
+            from escharts_parser import EsChartsClient
+            client = EsChartsClient(min_delay=args.min_delay, proxy=args.proxy)
+        svc = EsChartsService(client)
         if args.cmd == "tournaments":
             return _print({
                 "game": args.game,

@@ -1,10 +1,11 @@
-"""CloakBrowser-backed HLTV fetch client.
+"""CloakBrowser-backed fetch client (HLTV + EsportsCharts).
 
-Drop-in replacement for ``HLTVClient`` that swaps the (Cloudflare-blocked)
-curl_cffi fetch for a CloakBrowser stealth-Chromium fetch. It exposes the
-SAME ``get(path, params, referer) -> html`` contract, so ``HLTVService``
-and every parser in ``parsers.py`` work unchanged — only the transport
-differs.
+Drop-in replacement for the curl_cffi ``*Client`` classes that swaps the
+(Cloudflare-blocked) fetch for a CloakBrowser stealth-Chromium fetch. It
+exposes the SAME ``get(path, params, referer) -> html`` contract, so the
+service layers and parsers work unchanged — only the transport differs.
+The target site is set via ``base_url`` (defaults to HLTV); EsportsCharts
+reuses the same class with ``base_url="https://escharts.com"``.
 
 Why this exists: HLTV's Cloudflare WAF blocks curl_cffi within minutes
 (see docs/RESUMING_HLTV.md). A spike (scripts/cloak_poc.py) proved
@@ -68,8 +69,9 @@ def _looks_blocked(html: str) -> bool:
     return "cf_chl" in low and len(html) < 50_000
 
 
-class HLTVCloakClient:
-    """HLTV fetch via CloakBrowser. Same .get() contract as HLTVClient."""
+class CloakClient:
+    """Cloudflare-piercing fetch via CloakBrowser. Same .get() contract as
+    the curl_cffi clients; point it at a site with ``base_url``."""
 
     def __init__(
         self,
@@ -78,12 +80,16 @@ class HLTVCloakClient:
         settle_s: float = 2.0,
         challenge_wait_s: float = 30.0,
         headless: bool = True,
+        base_url: str = BASE_URL,
+        dump_env: str = "HLTV_CLOAK_DUMP_DIR",
     ):
         self.min_delay = min_delay
         self.timeout = timeout            # seconds
         self.settle_s = settle_s          # initial paint settle before polling
         self.challenge_wait_s = challenge_wait_s  # max time to let a challenge clear
         self.headless = headless
+        self.base_url = base_url
+        self.dump_env = dump_env
         self._last_request_at = 0.0
         self._lock = threading.Lock()
         self._browser = None              # lazily launched
@@ -163,7 +169,7 @@ class HLTVCloakClient:
         referer: Optional[str] = None,
     ) -> str:
         """GET ``path`` (relative or absolute) and return rendered HTML."""
-        url = path if path.startswith("http") else urljoin(BASE_URL, path)
+        url = path if path.startswith("http") else urljoin(self.base_url, path)
         if params:
             # Drop None values, mirror curl_cffi's query encoding.
             clean = {k: v for k, v in params.items() if v is not None}
@@ -195,7 +201,7 @@ class HLTVCloakClient:
             # Optional raw-HTML dump for selector debugging (off unless
             # HLTV_CLOAK_DUMP_DIR is set). Dumped before the block check so
             # a challenge page can be inspected too.
-            dump_dir = os.getenv("HLTV_CLOAK_DUMP_DIR")
+            dump_dir = os.getenv(self.dump_env)
             if dump_dir:
                 d = Path(dump_dir)
                 d.mkdir(parents=True, exist_ok=True)
