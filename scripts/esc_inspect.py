@@ -91,6 +91,24 @@ def main() -> int:
             if txt:
                 print(f"  <{sel} class={n.attributes.get('class')}> {txt[:60]!r}")
 
+    print("\n== densest table: first rows anatomy (leaf tag.class : text) ==")
+    tables = t.css("table")
+    if tables:
+        dense = max(tables, key=lambda tb: len(tb.css("tr")))
+        rows = dense.css("tr")
+        print(f"  (table rows={len(rows)})")
+        for ri, tr in enumerate(rows[:3]):
+            print(f"  --- row[{ri}] ---")
+            for td_i, td in enumerate(tr.css("td, th")):
+                print(f"    td[{td_i}]:")
+                for leaf in td.css("*"):
+                    if leaf.child is not None:
+                        continue
+                    txt = leaf.text(strip=True)
+                    if not txt or len(txt) > 50:
+                        continue
+                    print(f"      <{leaf.tag} .{leaf.attributes.get('class')}> {txt!r}")
+
     return 0
 
 
