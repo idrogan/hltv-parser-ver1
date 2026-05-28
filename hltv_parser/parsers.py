@@ -44,11 +44,25 @@ def _stats_rows(tree: HTMLParser) -> dict[str, str]:
 
 
 def _highlight_boxes(tree: HTMLParser) -> dict[str, str]:
-    """Parse the ``.standard-box .large-strong`` / ``.small-label-below`` pairs."""
+    """Parse the ``.large-strong`` value / ``.small-label-below`` label pairs.
+
+    Preferred shape is a label+value nested in one column box. HLTV now
+    renders the overview page as two parallel flat lists instead, so fall
+    back to zipping ``.small-label-below`` and ``.large-strong`` by document
+    order when the nested form yields nothing.
+    """
     out: dict[str, str] = {}
     for box in tree.css(".standard-box .col, .standard-box .columns .col"):
         label = text_or_none(box.css_first(".small-label-below"))
         value = text_or_none(box.css_first(".large-strong"))
+        if label and value:
+            out[label.lower().strip()] = value
+    if out:
+        return out
+
+    labels = [text_or_none(n) for n in tree.css(".small-label-below")]
+    values = [text_or_none(n) for n in tree.css(".large-strong")]
+    for label, value in zip(labels, values):
         if label and value:
             out[label.lower().strip()] = value
     return out
@@ -69,18 +83,35 @@ def parse_team_overview(html: str) -> dict:
                     return transform(src[k])
         return None
 
+    # HLTV collapses the W/D/L counts into one "54 / 0 / 61" cell rather
+    # than three separate stats; split it back out, but keep the legacy
+    # per-key lookup as a fallback for older page variants.
+    wins = draws = losses = None
+    wdl = highlights.get("wins / draws / losses") or rows.get("wins / draws / losses")
+    if wdl:
+        parts = [p.strip() for p in wdl.split("/")]
+        if len(parts) == 3:
+            wins, draws, losses = (parse_int(p) for p in parts)
+
+    maps_played = pick("maps played", transform=parse_int)
+    win_rate = pick("win rate", "win rate %", transform=parse_percent)
+    # The overview page no longer prints a win-rate figure; derive it from
+    # the decided maps when HLTV doesn't hand us one.
+    if win_rate is None and wins is not None and maps_played:
+        win_rate = round(wins / maps_played * 100, 1)
+
     return {
         "team_name": text_or_none(tree.css_first(".context-item-name"))
         or text_or_none(tree.css_first("h1")),
-        "maps_played": pick("maps played", transform=parse_int),
-        "wins": pick("wins", transform=parse_int),
-        "draws": pick("draws", transform=parse_int),
-        "losses": pick("losses", transform=parse_int),
+        "maps_played": maps_played,
+        "wins": wins if wins is not None else pick("wins", transform=parse_int),
+        "draws": draws if draws is not None else pick("draws", transform=parse_int),
+        "losses": losses if losses is not None else pick("losses", transform=parse_int),
         "total_kills": pick("total kills", transform=parse_int),
         "total_deaths": pick("total deaths", transform=parse_int),
         "rounds_played": pick("rounds played", transform=parse_int),
         "kd_ratio": pick("k/d ratio", "k/d", transform=parse_number),
-        "win_rate_percent": pick("win rate", "win rate %", transform=parse_percent),
+        "win_rate_percent": win_rate,
     }
 
 
