@@ -48,7 +48,7 @@ services:
       - key: HLTV_MIN_DELAY
         value: "2.0"
       - key: STEAM_MIN_DELAY
-        value: "3.5"
+        value: "5.0"
       - key: ESCHARTS_MIN_DELAY
         value: "2.0"
 

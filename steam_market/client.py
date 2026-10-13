@@ -1,7 +1,8 @@
 """HTTP client for the Steam Community Market.
 
-No TLS impersonation needed — plain requests work fine — but Valve
-429s hard if you burst. We throttle to one request every
+Requests impersonate a Chrome TLS fingerprint (``impersonate="chrome124"``):
+from datacenter IPs (Azure) Steam answers plain curl_cffi requests with 429,
+while the impersonated ones pass. Valve also 429s hard if you burst. We throttle to one request every
 ``STEAM_MIN_DELAY`` seconds (default 3.5) and retry with backoff on
 429/5xx.
 """
@@ -113,6 +114,7 @@ class SteamClient:
                 cookies=self._cookies(),
                 timeout=self.timeout,
                 proxies=proxies,
+                impersonate="chrome124",
             )
         except Exception as exc:
             raise SteamBlockedError(f"network error: {exc}") from exc
