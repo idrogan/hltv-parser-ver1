@@ -1,0 +1,357 @@
+{
+  "name": "Registry monitor — new filings to Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "15 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "74734fe0-62e1-4c3a-83e9-c1332bdec87d",
+      "name": "Daily 07:15",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/legal_entity?monitor=eq.true&select=id,registry,entity_id,name",
+        "options": {
+          "timeout": 60000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE }}"
+            }
+          ]
+        }
+      },
+      "id": "994f0e17-7f62-4275-bac1-2d5255e97450",
+      "name": "Get monitored entities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Monitored entities -> one batch request for the parser.\n// Look back 45 days: older filings are ignored, repeats are dropped by filing_uid in Supabase.\nconst since = new Date(Date.now() - 45 * 24 * 3600 * 1000).toISOString().slice(0, 10);\nconst entities = $input.all()\n  .map(i => i.json)\n  .filter(e => e && e.registry && e.entity_id)\n  .map(e => ({ registry: e.registry, entity_id: String(e.entity_id), legal_entity_id: e.id, name: e.name }));\nif (entities.length === 0) return [];\nreturn [{ json: { entities, since, limit: 50 } }];"
+      },
+      "id": "fed6a5ab-601a-424e-92a6-5aa16642180c",
+      "name": "Build request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.ESPORTS_API_BASE }}/registries/filings",
+        "options": {
+          "timeout": 180000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.ESPORTS_API_TOKEN }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "1b0ad471-040e-4119-a2b7-5d68ddb0dc6c",
+      "name": "Fetch filings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parser response -> one item per filing (columns of the `filing` table only)\n// plus one item per registry error.\nconst res = $input.first().json;\nconst cols = ['filing_uid','registry','entity_id','legal_entity_id','filed_at','form','category',\n              'description','period_end','document_url','source_url'];\nconst out = [];\nfor (const f of (res.filings || [])) {\n  const row = {};\n  for (const c of cols) row[c] = f[c] ?? null;\n  out.push({ json: { kind: 'filing', entity_name: f.entity_name || f.entity_id, row } });\n}\nfor (const e of (res.errors || [])) {\n  out.push({ json: { kind: 'error', ...e } });\n}\nreturn out;"
+      },
+      "id": "0032adc5-7398-4fa0-b76a-e17d0ba766d5",
+      "name": "Split filings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "4c29a9a1-5168-4d5c-8cfc-cce099a635b2",
+              "leftValue": "={{ $json.kind }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "rightValue": "error"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0f3ece17-bec8-4c45-a98d-3b66345585ce",
+      "name": "Is error?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "options": {
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $env.TELEGRAM_CHAT_ID, disable_web_page_preview: true, text: 'Монитор реестров: ошибка\\n' + $json.registry + ' ' + $json.entity_id + '\\n' + $json.error }) }}"
+      },
+      "id": "018bd16b-9d5f-409f-b03f-11a3dbabcb49",
+      "name": "Telegram: registry error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/filing?on_conflict=filing_uid",
+        "options": {
+          "timeout": 60000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE }}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE }}"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=ignore-duplicates,return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.row) }}"
+      },
+      "id": "b874fa5e-195f-4199-8ac0-866f703e0cf7",
+      "name": "Insert filing (new only)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "03e5c4d7-e87a-4cda-a174-e60739c5643b",
+              "leftValue": "={{ $json.filing_uid }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4e1b6be-ec6a-4047-a06b-b2a9cc18664b",
+      "name": "Is new?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
+        "options": {
+          "timeout": 60000
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ chat_id: $env.TELEGRAM_CHAT_ID, disable_web_page_preview: true, text: 'Новый документ в реестре\\n' + $('Is error?').item.json.entity_name + '\\n' + [$json.category, $json.form, $json.filed_at].filter(Boolean).join(' · ') + '\\n' + ($json.description || '') + '\\n' + ($json.document_url || $json.source_url || '') }) }}"
+      },
+      "id": "81d3330a-8924-46d9-ab1e-5bbe726b0400",
+      "name": "Telegram: new filing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        80
+      ]
+    }
+  ],
+  "connections": {
+    "Daily 07:15": {
+      "main": [
+        [
+          {
+            "node": "Get monitored entities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get monitored entities": {
+      "main": [
+        [
+          {
+            "node": "Build request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build request": {
+      "main": [
+        [
+          {
+            "node": "Fetch filings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch filings": {
+      "main": [
+        [
+          {
+            "node": "Split filings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split filings": {
+      "main": [
+        [
+          {
+            "node": "Is error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is error?": {
+      "main": [
+        [
+          {
+            "node": "Telegram: registry error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Insert filing (new only)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert filing (new only)": {
+      "main": [
+        [
+          {
+            "node": "Is new?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is new?": {
+      "main": [
+        [
+          {
+            "node": "Telegram: new filing",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Brussels"
+  },
+  "meta": {
+    "description": "Daily: legal_entity (monitor=true) -> parser /registries/filings -> insert into filing (duplicates ignored) -> Telegram alert for new rows. Uses $env only (needs N8N_BLOCK_ENV_ACCESS_IN_NODE=false); no credentials to bind. Tested against n8n 2.43."
+  }
+}

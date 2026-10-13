@@ -65,3 +65,10 @@ services:
       # cookie value from your browser; treat it as a secret.
       - key: STEAM_LOGIN_SECURE
         sync: false
+
+      # Company registries. Companies House needs a free key; SEC needs a
+      # contact User-Agent ("Name email@example.com").
+      - key: COMPANIES_HOUSE_API_KEY
+        sync: false
+      - key: REGISTRY_USER_AGENT
+        sync: false

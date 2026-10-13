@@ -41,6 +41,24 @@ All time-windowed endpoints accept: `start_date=YYYY-MM-DD` & `end_date=YYYY-MM-
 | `GET /escharts/tournaments?game=cs2&year=2025` | Tournament leaderboard — peak/avg viewers, hours watched, airtime |
 | `GET /escharts/tournament/{game}/{slug}`       | Single-tournament detail incl. per-channel breakdown |
 
+### Company registries  — `/registries/*`
+Official filings for the legal entities behind teams and tournament operators.
+UK Companies House (`gb_ch`, free API key in `COMPANIES_HOUSE_API_KEY`),
+Denmark CVR filings index (`dk_cvr`), Norway Brønnøysund (`no_brreg`),
+SEC EDGAR (`us_sec`, needs a contact in `REGISTRY_USER_AGENT`).
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /registries/{registry}/{entity_id}/filings?since=YYYY-MM-DD` | Normalized filings for one entity |
+| `POST /registries/filings` | Batch: `{"entities":[{"registry","entity_id","legal_entity_id","name"}], "since"}` |
+| `GET /registries/no_brreg/{orgnr}/accounts` | Key figures from Regnskapsregisteret |
+
+Every filing has a stable `filing_uid` used for dedupe. Schema for brands,
+legal entities, filings and extracted figures:
+[`examples/supabase_schema_finance.sql`](examples/supabase_schema_finance.sql).
+Daily monitor workflow (no credentials to bind, `$env` only):
+[`examples/n8n_registry_monitor.json`](examples/n8n_registry_monitor.json).
+
 ### Meta endpoints (always public, no auth)
 
 | Endpoint | Purpose |

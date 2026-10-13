@@ -24,6 +24,8 @@ from escharts_parser.router import register_exception_handlers as escharts_handl
 from escharts_parser.router import router as escharts_router
 from hltv_parser.router import register_exception_handlers as hltv_handlers
 from hltv_parser.router import router as hltv_router
+from registries.router import register_exception_handlers as registries_handlers
+from registries.router import router as registries_router
 from steam_market.router import register_exception_handlers as steam_handlers
 from steam_market.router import router as steam_router
 
@@ -41,8 +43,8 @@ app = FastAPI(
     title="Esports Data API",
     version="0.3.0",
     description=(
-        "JSON wrapper around HLTV, Steam Community Market and "
-        "EsportsCharts — designed as Layer 1 of a Make/n8n content "
+        "JSON wrapper around HLTV, Steam Community Market, "
+        "EsportsCharts and official company registries — designed as Layer 1 of a Make/n8n content "
         "pipeline. All time-windowed HLTV endpoints accept explicit "
         "start_date/end_date (YYYY-MM-DD) or a months_back shortcut."
     ),
@@ -61,18 +63,19 @@ app.add_middleware(
 
 install_middleware(app)
 
-for register in (hltv_handlers, steam_handlers, escharts_handlers):
+for register in (hltv_handlers, steam_handlers, escharts_handlers, registries_handlers):
     register(app)
 
 app.include_router(hltv_router)
 app.include_router(steam_router)
 app.include_router(escharts_router)
+app.include_router(registries_router)
 
 
 @app.get("/health", tags=["meta"])
 def health() -> dict:
     """Public liveness probe — no auth, no rate limit exemption needed."""
-    return {"ok": True, "sources": ["hltv", "steam", "escharts"]}
+    return {"ok": True, "sources": ["hltv", "steam", "escharts", "registries"]}
 
 
 @app.get("/warmup", tags=["meta"])
