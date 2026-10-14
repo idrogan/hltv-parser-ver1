@@ -1,0 +1,789 @@
+{
+ "2019": {
+  "an": 2019,
+  "cui": 16896480,
+  "deni": "PGL ESPORT SRL",
+  "caen": 6020,
+  "den_caen": "Activitati de difuzare a programelor de televiziune",
+  "i": [
+   {
+    "indicator": "I1",
+    "val_indicator": 5256353,
+    "val_den_indicator": "ACTIVE IMOBILIZATE - TOTAL "
+   },
+   {
+    "indicator": "I2",
+    "val_indicator": 20218338,
+    "val_den_indicator": "ACTIVE CIRCULANTE - TOTAL, din care:"
+   },
+   {
+    "indicator": "I3",
+    "val_indicator": 1172422,
+    "val_den_indicator": "Stocuri"
+   },
+   {
+    "indicator": "I4",
+    "val_indicator": 17775092,
+    "val_den_indicator": "Creante"
+   },
+   {
+    "indicator": "I5",
+    "val_indicator": 1270824,
+    "val_den_indicator": "Casa şi conturi la bănci"
+   },
+   {
+    "indicator": "I6",
+    "val_indicator": 10033594,
+    "val_den_indicator": "CHELTUIELI IN AVANS"
+   },
+   {
+    "indicator": "I7",
+    "val_indicator": 11315300,
+    "val_den_indicator": "DATORII"
+   },
+   {
+    "indicator": "I8",
+    "val_indicator": 15255388,
+    "val_den_indicator": "VENITURI IN AVANS"
+   },
+   {
+    "indicator": "I9",
+    "val_indicator": 0,
+    "val_den_indicator": "PROVIZIOANE"
+   },
+   {
+    "indicator": "I10",
+    "val_indicator": 8937597,
+    "val_den_indicator": "CAPITALURI - TOTAL, din care:"
+   },
+   {
+    "indicator": "I11",
+    "val_indicator": 25000,
+    "val_den_indicator": "Capital subscris varsat"
+   },
+   {
+    "indicator": "I12",
+    "val_indicator": 0,
+    "val_den_indicator": "Patrimoniul regiei "
+   },
+   {
+    "indicator": "I13",
+    "val_indicator": 52173472,
+    "val_den_indicator": "Cifra de afaceri neta"
+   },
+   {
+    "indicator": "I14",
+    "val_indicator": 54106473,
+    "val_den_indicator": "VENITURI TOTALE"
+   },
+   {
+    "indicator": "I15",
+    "val_indicator": 43186211,
+    "val_den_indicator": "CHELTUIELI TOTALE"
+   },
+   {
+    "indicator": "I16",
+    "val_indicator": 10920262,
+    "val_den_indicator": "Profit brut"
+   },
+   {
+    "indicator": "I17",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere bruta"
+   },
+   {
+    "indicator": "I18",
+    "val_indicator": 9243678,
+    "val_den_indicator": "Profit net"
+   },
+   {
+    "indicator": "I19",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere neta"
+   },
+   {
+    "indicator": "I20",
+    "val_indicator": 46,
+    "val_den_indicator": "Numar mediu de salariati"
+   }
+  ]
+ },
+ "2020": {
+  "an": 2020,
+  "cui": 16896480,
+  "deni": "PGL ESPORT SRL",
+  "caen": 6020,
+  "den_caen": "Activitati de difuzare a programelor de televiziune",
+  "i": [
+   {
+    "indicator": "I1",
+    "val_indicator": 3841276,
+    "val_den_indicator": "ACTIVE IMOBILIZATE - TOTAL "
+   },
+   {
+    "indicator": "I2",
+    "val_indicator": 56929622,
+    "val_den_indicator": "ACTIVE CIRCULANTE - TOTAL, din care:"
+   },
+   {
+    "indicator": "I3",
+    "val_indicator": 2359461,
+    "val_den_indicator": "Stocuri"
+   },
+   {
+    "indicator": "I4",
+    "val_indicator": 24176024,
+    "val_den_indicator": "Creante"
+   },
+   {
+    "indicator": "I5",
+    "val_indicator": 30394137,
+    "val_den_indicator": "Casa şi conturi la bănci"
+   },
+   {
+    "indicator": "I6",
+    "val_indicator": 97901,
+    "val_den_indicator": "CHELTUIELI IN AVANS"
+   },
+   {
+    "indicator": "I7",
+    "val_indicator": 18046223,
+    "val_den_indicator": "DATORII"
+   },
+   {
+    "indicator": "I8",
+    "val_indicator": 34397134,
+    "val_den_indicator": "VENITURI IN AVANS"
+   },
+   {
+    "indicator": "I9",
+    "val_indicator": 0,
+    "val_den_indicator": "PROVIZIOANE"
+   },
+   {
+    "indicator": "I10",
+    "val_indicator": 8425442,
+    "val_den_indicator": "CAPITALURI - TOTAL, din care:"
+   },
+   {
+    "indicator": "I11",
+    "val_indicator": 25000,
+    "val_den_indicator": "Capital subscris varsat"
+   },
+   {
+    "indicator": "I12",
+    "val_indicator": 0,
+    "val_den_indicator": "Patrimoniul regiei "
+   },
+   {
+    "indicator": "I13",
+    "val_indicator": 47490761,
+    "val_den_indicator": "Cifra de afaceri neta"
+   },
+   {
+    "indicator": "I14",
+    "val_indicator": 51996577,
+    "val_den_indicator": "VENITURI TOTALE"
+   },
+   {
+    "indicator": "I15",
+    "val_indicator": 42259590,
+    "val_den_indicator": "CHELTUIELI TOTALE"
+   },
+   {
+    "indicator": "I16",
+    "val_indicator": 9736987,
+    "val_den_indicator": "Profit brut"
+   },
+   {
+    "indicator": "I17",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere bruta"
+   },
+   {
+    "indicator": "I18",
+    "val_indicator": 8395442,
+    "val_den_indicator": "Profit net"
+   },
+   {
+    "indicator": "I19",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere neta"
+   },
+   {
+    "indicator": "I20",
+    "val_indicator": 43,
+    "val_den_indicator": "Numar mediu de salariati"
+   }
+  ]
+ },
+ "2021": {
+  "an": 2021,
+  "cui": 16896480,
+  "deni": "PGL ESPORT SRL",
+  "caen": 6020,
+  "den_caen": "Activitati de difuzare a programelor de televiziune",
+  "i": [
+   {
+    "indicator": "I1",
+    "val_indicator": 5631752,
+    "val_den_indicator": "ACTIVE IMOBILIZATE - TOTAL "
+   },
+   {
+    "indicator": "I2",
+    "val_indicator": 105358015,
+    "val_den_indicator": "ACTIVE CIRCULANTE - TOTAL, din care:"
+   },
+   {
+    "indicator": "I3",
+    "val_indicator": 1127099,
+    "val_den_indicator": "Stocuri"
+   },
+   {
+    "indicator": "I4",
+    "val_indicator": 40679578,
+    "val_den_indicator": "Creante"
+   },
+   {
+    "indicator": "I5",
+    "val_indicator": 63551338,
+    "val_den_indicator": "Casa şi conturi la bănci"
+   },
+   {
+    "indicator": "I6",
+    "val_indicator": 132343,
+    "val_den_indicator": "CHELTUIELI IN AVANS"
+   },
+   {
+    "indicator": "I7",
+    "val_indicator": 38117773,
+    "val_den_indicator": "DATORII"
+   },
+   {
+    "indicator": "I8",
+    "val_indicator": 19027530,
+    "val_den_indicator": "VENITURI IN AVANS"
+   },
+   {
+    "indicator": "I9",
+    "val_indicator": 16307,
+    "val_den_indicator": "PROVIZIOANE"
+   },
+   {
+    "indicator": "I10",
+    "val_indicator": 53960500,
+    "val_den_indicator": "CAPITALURI - TOTAL, din care:"
+   },
+   {
+    "indicator": "I11",
+    "val_indicator": 50000,
+    "val_den_indicator": "Capital subscris varsat"
+   },
+   {
+    "indicator": "I12",
+    "val_indicator": 0,
+    "val_den_indicator": "Patrimoniul regiei "
+   },
+   {
+    "indicator": "I13",
+    "val_indicator": 425942370,
+    "val_den_indicator": "Cifra de afaceri neta"
+   },
+   {
+    "indicator": "I14",
+    "val_indicator": 435651762,
+    "val_den_indicator": "VENITURI TOTALE"
+   },
+   {
+    "indicator": "I15",
+    "val_indicator": 374706710,
+    "val_den_indicator": "CHELTUIELI TOTALE"
+   },
+   {
+    "indicator": "I16",
+    "val_indicator": 60945052,
+    "val_den_indicator": "Profit brut"
+   },
+   {
+    "indicator": "I17",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere bruta"
+   },
+   {
+    "indicator": "I18",
+    "val_indicator": 52816766,
+    "val_den_indicator": "Profit net"
+   },
+   {
+    "indicator": "I19",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere neta"
+   },
+   {
+    "indicator": "I20",
+    "val_indicator": 47,
+    "val_den_indicator": "Numar mediu de salariati"
+   }
+  ]
+ },
+ "2022": {
+  "an": 2022,
+  "cui": 16896480,
+  "deni": "PGL ESPORT SRL",
+  "caen": 6020,
+  "den_caen": "Activitati de difuzare a programelor de televiziune",
+  "i": [
+   {
+    "indicator": "I1",
+    "val_indicator": 4596237,
+    "val_den_indicator": "ACTIVE IMOBILIZATE - TOTAL "
+   },
+   {
+    "indicator": "I2",
+    "val_indicator": 89166815,
+    "val_den_indicator": "ACTIVE CIRCULANTE - TOTAL, din care:"
+   },
+   {
+    "indicator": "I3",
+    "val_indicator": 1079293,
+    "val_den_indicator": "Stocuri"
+   },
+   {
+    "indicator": "I4",
+    "val_indicator": 77137452,
+    "val_den_indicator": "Creante"
+   },
+   {
+    "indicator": "I5",
+    "val_indicator": 10950070,
+    "val_den_indicator": "Casa şi conturi la bănci"
+   },
+   {
+    "indicator": "I6",
+    "val_indicator": 368754,
+    "val_den_indicator": "CHELTUIELI IN AVANS"
+   },
+   {
+    "indicator": "I7",
+    "val_indicator": 22603957,
+    "val_den_indicator": "DATORII"
+   },
+   {
+    "indicator": "I8",
+    "val_indicator": 11893789,
+    "val_den_indicator": "VENITURI IN AVANS"
+   },
+   {
+    "indicator": "I9",
+    "val_indicator": 715343,
+    "val_den_indicator": "PROVIZIOANE"
+   },
+   {
+    "indicator": "I10",
+    "val_indicator": 58918717,
+    "val_den_indicator": "CAPITALURI - TOTAL, din care:"
+   },
+   {
+    "indicator": "I11",
+    "val_indicator": 50000,
+    "val_den_indicator": "Capital subscris varsat"
+   },
+   {
+    "indicator": "I12",
+    "val_indicator": 0,
+    "val_den_indicator": "Patrimoniul regiei "
+   },
+   {
+    "indicator": "I13",
+    "val_indicator": 352491948,
+    "val_den_indicator": "Cifra de afaceri neta"
+   },
+   {
+    "indicator": "I14",
+    "val_indicator": 373005654,
+    "val_den_indicator": "VENITURI TOTALE"
+   },
+   {
+    "indicator": "I15",
+    "val_indicator": 307134164,
+    "val_den_indicator": "CHELTUIELI TOTALE"
+   },
+   {
+    "indicator": "I16",
+    "val_indicator": 65871490,
+    "val_den_indicator": "Profit brut"
+   },
+   {
+    "indicator": "I17",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere bruta"
+   },
+   {
+    "indicator": "I18",
+    "val_indicator": 56958217,
+    "val_den_indicator": "Profit net"
+   },
+   {
+    "indicator": "I19",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere neta"
+   },
+   {
+    "indicator": "I20",
+    "val_indicator": 51,
+    "val_den_indicator": "Numar mediu de salariati"
+   }
+  ]
+ },
+ "2023": {
+  "an": 2023,
+  "cui": 16896480,
+  "deni": "PGL ESPORT SRL",
+  "caen": 6020,
+  "den_caen": "Activitati de difuzare a programelor de televiziune",
+  "i": [
+   {
+    "indicator": "I1",
+    "val_indicator": 3212562,
+    "val_den_indicator": "ACTIVE IMOBILIZATE - TOTAL "
+   },
+   {
+    "indicator": "I2",
+    "val_indicator": 37011101,
+    "val_den_indicator": "ACTIVE CIRCULANTE - TOTAL, din care:"
+   },
+   {
+    "indicator": "I3",
+    "val_indicator": 3306180,
+    "val_den_indicator": "Stocuri"
+   },
+   {
+    "indicator": "I4",
+    "val_indicator": 9872972,
+    "val_den_indicator": "Creante"
+   },
+   {
+    "indicator": "I5",
+    "val_indicator": 23831949,
+    "val_den_indicator": "Casa şi conturi la bănci"
+   },
+   {
+    "indicator": "I6",
+    "val_indicator": 583232,
+    "val_den_indicator": "CHELTUIELI IN AVANS"
+   },
+   {
+    "indicator": "I7",
+    "val_indicator": 3876819,
+    "val_den_indicator": "DATORII"
+   },
+   {
+    "indicator": "I8",
+    "val_indicator": 8897382,
+    "val_den_indicator": "VENITURI IN AVANS"
+   },
+   {
+    "indicator": "I9",
+    "val_indicator": 0,
+    "val_den_indicator": "PROVIZIOANE"
+   },
+   {
+    "indicator": "I10",
+    "val_indicator": 28032694,
+    "val_den_indicator": "CAPITALURI - TOTAL, din care:"
+   },
+   {
+    "indicator": "I11",
+    "val_indicator": 50000,
+    "val_den_indicator": "Capital subscris varsat"
+   },
+   {
+    "indicator": "I12",
+    "val_indicator": 0,
+    "val_den_indicator": "Patrimoniul regiei "
+   },
+   {
+    "indicator": "I13",
+    "val_indicator": 140357364,
+    "val_den_indicator": "Cifra de afaceri neta"
+   },
+   {
+    "indicator": "I14",
+    "val_indicator": 159220279,
+    "val_den_indicator": "VENITURI TOTALE"
+   },
+   {
+    "indicator": "I15",
+    "val_indicator": 130789510,
+    "val_den_indicator": "CHELTUIELI TOTALE"
+   },
+   {
+    "indicator": "I16",
+    "val_indicator": 28430769,
+    "val_den_indicator": "Profit brut"
+   },
+   {
+    "indicator": "I17",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere bruta"
+   },
+   {
+    "indicator": "I18",
+    "val_indicator": 25013977,
+    "val_den_indicator": "Profit net"
+   },
+   {
+    "indicator": "I19",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere neta"
+   },
+   {
+    "indicator": "I20",
+    "val_indicator": 50,
+    "val_den_indicator": "Numar mediu de salariati"
+   }
+  ]
+ },
+ "2024": {
+  "an": 2024,
+  "cui": 16896480,
+  "deni": "PGL ESPORT SRL",
+  "caen": 6020,
+  "den_caen": "Activitati de difuzare a programelor de televiziune",
+  "i": [
+   {
+    "indicator": "I1",
+    "val_indicator": 6078070,
+    "val_den_indicator": "ACTIVE IMOBILIZATE - TOTAL "
+   },
+   {
+    "indicator": "I2",
+    "val_indicator": 62056302,
+    "val_den_indicator": "ACTIVE CIRCULANTE - TOTAL, din care:"
+   },
+   {
+    "indicator": "I3",
+    "val_indicator": 3230520,
+    "val_den_indicator": "Stocuri"
+   },
+   {
+    "indicator": "I4",
+    "val_indicator": 47726367,
+    "val_den_indicator": "Creante"
+   },
+   {
+    "indicator": "I5",
+    "val_indicator": 11099415,
+    "val_den_indicator": "Casa şi conturi la bănci"
+   },
+   {
+    "indicator": "I6",
+    "val_indicator": 658397,
+    "val_den_indicator": "CHELTUIELI IN AVANS"
+   },
+   {
+    "indicator": "I7",
+    "val_indicator": 13282263,
+    "val_den_indicator": "DATORII"
+   },
+   {
+    "indicator": "I8",
+    "val_indicator": 1275175,
+    "val_den_indicator": "VENITURI IN AVANS"
+   },
+   {
+    "indicator": "I9",
+    "val_indicator": 22826,
+    "val_den_indicator": "PROVIZIOANE"
+   },
+   {
+    "indicator": "I10",
+    "val_indicator": 54212505,
+    "val_den_indicator": "CAPITALURI - TOTAL, din care:"
+   },
+   {
+    "indicator": "I11",
+    "val_indicator": 50000,
+    "val_den_indicator": "Capital subscris varsat"
+   },
+   {
+    "indicator": "I12",
+    "val_indicator": 0,
+    "val_den_indicator": "Patrimoniul regiei "
+   },
+   {
+    "indicator": "I13",
+    "val_indicator": 196429575,
+    "val_den_indicator": "Cifra de afaceri neta"
+   },
+   {
+    "indicator": "I14",
+    "val_indicator": 199610837,
+    "val_den_indicator": "VENITURI TOTALE"
+   },
+   {
+    "indicator": "I15",
+    "val_indicator": 142088188,
+    "val_den_indicator": "CHELTUIELI TOTALE"
+   },
+   {
+    "indicator": "I16",
+    "val_indicator": 57522649,
+    "val_den_indicator": "Profit brut"
+   },
+   {
+    "indicator": "I17",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere bruta"
+   },
+   {
+    "indicator": "I18",
+    "val_indicator": 50179812,
+    "val_den_indicator": "Profit net"
+   },
+   {
+    "indicator": "I19",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere neta"
+   },
+   {
+    "indicator": "I20",
+    "val_indicator": 50,
+    "val_den_indicator": "Numar mediu de salariati"
+   }
+  ]
+ },
+ "2025": {
+  "an": 2025,
+  "cui": 16896480,
+  "deni": "PGL ESPORT SRL",
+  "caen": 6020,
+  "den_caen": "Activitati de difuzare a programelor de televiziune",
+  "i": [
+   {
+    "indicator": "I1",
+    "val_indicator": 5352756,
+    "val_den_indicator": "ACTIVE IMOBILIZATE - TOTAL "
+   },
+   {
+    "indicator": "I2",
+    "val_indicator": 43072409,
+    "val_den_indicator": "ACTIVE CIRCULANTE - TOTAL, din care:"
+   },
+   {
+    "indicator": "I3",
+    "val_indicator": 2190834,
+    "val_den_indicator": "Stocuri"
+   },
+   {
+    "indicator": "I4",
+    "val_indicator": 29590558,
+    "val_den_indicator": "Creante"
+   },
+   {
+    "indicator": "I5",
+    "val_indicator": 11291017,
+    "val_den_indicator": "Casa şi conturi la bănci"
+   },
+   {
+    "indicator": "I6",
+    "val_indicator": 671419,
+    "val_den_indicator": "CHELTUIELI IN AVANS"
+   },
+   {
+    "indicator": "I7",
+    "val_indicator": 13716953,
+    "val_den_indicator": "DATORII"
+   },
+   {
+    "indicator": "I8",
+    "val_indicator": 377769,
+    "val_den_indicator": "VENITURI IN AVANS"
+   },
+   {
+    "indicator": "I9",
+    "val_indicator": 0,
+    "val_den_indicator": "PROVIZIOANE"
+   },
+   {
+    "indicator": "I10",
+    "val_indicator": 35001862,
+    "val_den_indicator": "CAPITALURI - TOTAL, din care:"
+   },
+   {
+    "indicator": "I11",
+    "val_indicator": 50000,
+    "val_den_indicator": "Capital subscris varsat"
+   },
+   {
+    "indicator": "I12",
+    "val_indicator": 0,
+    "val_den_indicator": "Patrimoniul regiei "
+   },
+   {
+    "indicator": "I13",
+    "val_indicator": 212393745,
+    "val_den_indicator": "Cifra de afaceri neta"
+   },
+   {
+    "indicator": "I14",
+    "val_indicator": 214157035,
+    "val_den_indicator": "VENITURI TOTALE"
+   },
+   {
+    "indicator": "I15",
+    "val_indicator": 180153621,
+    "val_den_indicator": "CHELTUIELI TOTALE"
+   },
+   {
+    "indicator": "I16",
+    "val_indicator": 34003414,
+    "val_den_indicator": "Profit brut"
+   },
+   {
+    "indicator": "I17",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere bruta"
+   },
+   {
+    "indicator": "I18",
+    "val_indicator": 29789356,
+    "val_den_indicator": "Profit net"
+   },
+   {
+    "indicator": "I19",
+    "val_indicator": 0,
+    "val_den_indicator": "Pierdere neta"
+   },
+   {
+    "indicator": "I20",
+    "val_indicator": 48,
+    "val_den_indicator": "Numar mediu de salariati"
+   }
+  ]
+ },
+ "2016": {
+  "an": 2016,
+  "cui": 16896480,
+  "deni": "",
+  "caen": 0,
+  "den_caen": "",
+  "i": []
+ },
+ "2017": {
+  "an": 2017,
+  "cui": 16896480,
+  "deni": "",
+  "caen": 0,
+  "den_caen": "",
+  "i": []
+ },
+ "2018": {
+  "an": 2018,
+  "cui": 16896480,
+  "deni": "",
+  "caen": 0,
+  "den_caen": "",
+  "i": []
+ }
+}

@@ -59,6 +59,34 @@ legal entities, filings and extracted figures:
 Daily monitor workflow (no credentials to bind, `$env` only):
 [`examples/n8n_registry_monitor.json`](examples/n8n_registry_monitor.json).
 
+### Figures from registries → `financial_fact`
+`GET /registries/{ro_anaf|no_brreg}/{id}/accounts?from_year=&to_year=` returns normalized facts
+(revenue, net_result, employees, equity, cash, …). ANAF (Romania) exposes 20 headline items per year
+for free — e.g. PGL ESPORT SRL, CUI 16896480.
+
+Load them into Supabase (inside the parser container, which already has `SUPABASE_*`):
+
+```bash
+docker exec esports-data python tools/load_financials.py            # all monitored ro_anaf / no_brreg entities
+docker exec esports-data python tools/load_financials.py --entity ro_anaf:16896480 --dry-run
+```
+
+Schema change for this: [`examples/supabase_migration_002.sql`](examples/supabase_migration_002.sql).
+
+### Analysis & charts — `analysis/`
+House-style charts (one palette, source line, brand mark) from `financial_fact`:
+
+```bash
+pip install -r requirements-analysis.txt
+python -m analysis.company --entity-id <legal_entity.id> --name "PGL" --out out/pgl \
+       --source "ANAF balance sheets, PGL ESPORT SRL"
+```
+
+Produces revenue, net result, net margin and revenue-per-employee PNGs (16:9) plus `table.csv`.
+Non-EUR figures are converted with ECB annual averages (cached in `analysis/data/fx_cache.json`);
+if ECB is unreachable the charts stay in native currency and the footer says so.
+Rebrand by editing `BRAND` / `HANDLE` in `analysis/chart_style.py`.
+
 ### Meta endpoints (always public, no auth)
 
 | Endpoint | Purpose |

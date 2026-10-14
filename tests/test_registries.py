@@ -216,3 +216,83 @@ async def test_batch_endpoint_requires_auth_and_validates(fresh_app):
         assert r.json() == {"since": None, "count": 0, "filings": [], "errors": []}
         r = await ac.post("/registries/filings", json={"nope": 1}, headers={"Authorization": "Bearer abc123"})
         assert r.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Romania — ANAF (fixture = real responses for PGL ESPORT SRL, CUI 16896480)
+# ---------------------------------------------------------------------------
+
+import json
+import pathlib
+
+_ANAF = json.loads((pathlib.Path(__file__).parent / "fixtures" / "anaf_pgl_16896480.json").read_text())
+
+
+class AnafHttp:
+    def __init__(self):
+        self.calls = []
+
+    def request_json(self, method, url, params=None, **kw):
+        self.calls.append(params)
+        return _ANAF.get(str(params["an"]), {"an": params["an"], "i": []})
+
+
+def _anaf_service():
+    http = AnafHttp()
+    return RegistryService(http=http), http
+
+
+def test_anaf_accounts_maps_labels_and_signs():
+    svc, _ = _anaf_service()
+    facts = svc.accounts("ro_anaf", "16896480", from_year=2016, to_year=2025)
+    by = {(f["period_end"][:4], f["metric"]): f for f in facts}
+    assert by[("2024", "revenue")]["value"] == 196429575
+    assert by[("2024", "revenue")]["currency"] == "RON"
+    assert by[("2024", "net_result")]["value"] == 50179812          # profit row wins over 'Pierdere neta' = 0
+    assert by[("2025", "employees")]["value"] == 48 and by[("2025", "employees")]["currency"] is None
+    assert by[("2021", "revenue")]["value"] == 425942370
+    assert by[("2024", "cash")]["value"] == 11099415                 # 'Casa şi conturi la bănci' with diacritics
+    assert by[("2019", "cash")]["value"] == 1270824                  # same label without diacritics
+    assert by[("2024", "equity")]["value"] == 54212505               # ', din care:' suffix stripped
+    assert not any(k[0] in {"2016", "2017", "2018"} for k in by)     # empty years produce nothing
+    years = {k[0] for k in by}
+    assert years == {str(y) for y in range(2019, 2026)}
+    assert all(f["source_url"].startswith("https://webservicesp.anaf.ro/bilant?an=") for f in facts)
+
+
+def test_anaf_loss_year_is_negative():
+    payload = {"an": 2030, "i": [
+        {"indicator": "I18", "val_indicator": 0, "val_den_indicator": "Profit net"},
+        {"indicator": "I19", "val_indicator": 1500, "val_den_indicator": "Pierdere neta"},
+    ]}
+
+    class OneYear:
+        def request_json(self, method, url, params=None, **kw):
+            return payload
+
+    svc = RegistryService(http=OneYear())
+    [fact] = [f for f in svc.accounts("ro_anaf", "1", from_year=2030, to_year=2030) if f["metric"] == "net_result"]
+    assert fact["value"] == -1500
+
+
+def test_anaf_filings_one_per_published_year(monkeypatch):
+    import registries.sources as src
+
+    class FakeDate(src.date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 10, 14)
+
+    monkeypatch.setattr(src, "date", FakeDate)
+    svc, http = _anaf_service()
+    rows = svc.filings("ro_anaf", "RO16896480", limit=3)
+    assert [r["filing_uid"] for r in rows] == [
+        "ro_anaf:16896480:bilant:2025", "ro_anaf:16896480:bilant:2024", "ro_anaf:16896480:bilant:2023"]
+    assert "212 393 745 RON" in rows[0]["description"]
+    assert [c["an"] for c in http.calls] == [2025, 2024, 2023]
+
+
+def test_accounts_rejects_registry_without_figures():
+    svc, _ = _anaf_service()
+    with pytest.raises(RegistryError):
+        svc.accounts("gb_ch", "07751649")

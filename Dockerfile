@@ -19,6 +19,7 @@ COPY hltv_parser ./hltv_parser
 COPY steam_market ./steam_market
 COPY escharts_parser ./escharts_parser
 COPY registries ./registries
+COPY tools ./tools
 COPY app.py cli.py ./
 
 # EXPOSE is informational; Render ignores it and uses $PORT.

@@ -2,7 +2,8 @@
 
     GET  /registries/{registry}/{entity_id}/filings?since=YYYY-MM-DD
     POST /registries/filings        {"entities": [...], "since": "YYYY-MM-DD"}
-    GET  /registries/no_brreg/{orgnr}/accounts
+    GET  /registries/no_brreg/{orgnr}/accounts           (raw Brreg rows, kept for compatibility)
+    GET  /registries/{registry}/{entity_id}/accounts     (normalized facts; ro_anaf, no_brreg)
 """
 from __future__ import annotations
 
@@ -61,6 +62,17 @@ def batch_filings(req: BatchRequest) -> dict:
 @router.get("/no_brreg/{orgnr}/accounts", dependencies=[Depends(bearer_auth)])
 def brreg_accounts(orgnr: str) -> dict:
     return {"registry": "no_brreg", "entity_id": orgnr, "accounts": _service.brreg_accounts(orgnr)}
+
+
+@router.get("/{registry}/{entity_id}/accounts", dependencies=[Depends(bearer_auth)])
+def entity_accounts(
+    registry: str,
+    entity_id: str,
+    from_year: Optional[int] = Query(None, ge=2000, le=2100),
+    to_year: Optional[int] = Query(None, ge=2000, le=2100),
+) -> dict:
+    facts = _service.accounts(registry, entity_id, from_year=from_year, to_year=to_year)
+    return {"registry": registry, "entity_id": entity_id, "count": len(facts), "facts": facts}
 
 
 @router.get("/{registry}/{entity_id}/filings", dependencies=[Depends(bearer_auth)])

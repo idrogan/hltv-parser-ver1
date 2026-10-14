@@ -20,10 +20,18 @@ Registries
 * ``dk_cvr``   Denmark, Erhvervsstyrelsen public filings index (distribution.virk.dk), no key.
 * ``no_brreg`` Norway, Brønnøysund Enhetsregisteret + Regnskapsregisteret, no key.
 * ``us_sec``   SEC EDGAR submissions API, no key; a contact User-Agent is mandatory.
+* ``ro_anaf``  Romania, ANAF public balance-sheet API (20 headline items per year), no key.
+
+Sources that also expose *figures* implement ``accounts(entity_id, from_year, to_year)``
+returning normalized facts:
+
+    {"entity_id", "period_end", "metric", "value", "currency", "source_url", "label"}
 """
 from __future__ import annotations
 
 import logging
+import unicodedata
+from datetime import date
 from typing import Any, Optional
 
 from .client import HttpClient, RegistryAuthError, RegistryError
@@ -42,7 +50,7 @@ CATEGORIES = {
     "other",
 }
 
-REGISTRIES = ("gb_ch", "dk_cvr", "no_brreg", "us_sec")
+REGISTRIES = ("gb_ch", "dk_cvr", "no_brreg", "us_sec", "ro_anaf")
 
 
 def _d(value: Optional[str]) -> Optional[str]:
@@ -308,5 +316,119 @@ class SecEdgar:
                     f"https://www.sec.gov/Archives/edgar/data/{cik}/{acc_nodash}/{primary}" if primary else None
                 ),
                 "source_url": f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}",
+            })
+        return out
+
+
+# ---------------------------------------------------------------------------
+# Romania — ANAF balance-sheet API
+# ---------------------------------------------------------------------------
+
+def _norm_label(label: str) -> str:
+    """'CAPITALURI - TOTAL, din care:' -> 'capitaluri - total'; strips diacritics (ş/ș, ă)."""
+    text = unicodedata.normalize("NFKD", label or "")
+    text = "".join(ch for ch in text if not unicodedata.combining(ch)).lower()
+    text = text.split(", din care")[0]
+    return " ".join(text.replace(":", " ").split())
+
+
+# Map by *label*, not by I-code: codes differ between form types (large, small, micro, IFRS).
+_ANAF_METRICS = {
+    "cifra de afaceri neta": ("revenue", 1),
+    "venituri totale": ("total_income", 1),
+    "cheltuieli totale": ("total_expenses", 1),
+    "profit brut": ("pretax_result", 1),
+    "pierdere bruta": ("pretax_result", -1),
+    "profit net": ("net_result", 1),
+    "pierdere neta": ("net_result", -1),
+    "numar mediu de salariati": ("employees", 1),
+    "active imobilizate - total": ("fixed_assets", 1),
+    "active circulante - total": ("current_assets", 1),
+    "stocuri": ("inventories", 1),
+    "creante": ("receivables", 1),
+    "casa si conturi la banci": ("cash", 1),
+    "cheltuieli in avans": ("prepaid_expenses", 1),
+    "datorii": ("liabilities", 1),
+    "venituri in avans": ("deferred_income", 1),
+    "provizioane": ("provisions", 1),
+    "capitaluri - total": ("equity", 1),
+    "capital subscris varsat": ("share_capital", 1),
+}
+
+
+class RomaniaAnaf:
+    registry = "ro_anaf"
+    BILANT = "https://webservicesp.anaf.ro/bilant"
+
+    def __init__(self, http: HttpClient):
+        self.http = http
+
+    def _year(self, cui: str, year: int) -> dict:
+        return self.http.request_json("GET", self.BILANT, params={"an": year, "cui": cui})
+
+    def _source_url(self, cui: str, year: int) -> str:
+        return f"{self.BILANT}?an={year}&cui={cui}"
+
+    def accounts(self, entity_id: str, from_year: Optional[int] = None, to_year: Optional[int] = None) -> list[dict]:
+        cui = entity_id.upper().replace("RO", "").strip()
+        to_year = to_year or date.today().year - 1
+        from_year = from_year or to_year - 9
+        facts: list[dict] = []
+        for year in range(from_year, to_year + 1):
+            data = self._year(cui, year)
+            items = data.get("i") or []
+            # Gains and losses are separate rows; a loss row of 0 must not overwrite a profit.
+            merged: dict[str, tuple[float, str]] = {}
+            for it in items:
+                key = _norm_label(it.get("val_den_indicator", ""))
+                if key not in _ANAF_METRICS:
+                    continue
+                metric, sign = _ANAF_METRICS[key]
+                value = it.get("val_indicator")
+                if value is None:
+                    continue
+                if sign < 0 and value == 0 and metric in merged:
+                    continue
+                merged[metric] = (sign * value, it.get("val_den_indicator", "").strip())
+            for metric, (value, label) in merged.items():
+                facts.append({
+                    "entity_id": cui,
+                    "period_end": f"{year}-12-31",
+                    "metric": metric,
+                    "value": value,
+                    "currency": None if metric == "employees" else "RON",
+                    "label": label,
+                    "source_url": self._source_url(cui, year),
+                })
+        return facts
+
+    def filings(self, entity_id: str, limit: int = 2) -> list[dict]:
+        """The last ``limit`` fiscal years that ANAF already publishes, as 'accounts' filings.
+        A new year appearing is what the daily monitor alerts on."""
+        cui = entity_id.upper().replace("RO", "").strip()
+        last = date.today().year - 1
+        out = []
+        for year in range(last, last - max(1, min(limit, 5)), -1):
+            data = self._year(cui, year)
+            items = {(_norm_label(i.get("val_den_indicator", ""))): i.get("val_indicator") for i in data.get("i") or []}
+            if not items:
+                continue
+            revenue = items.get("cifra de afaceri neta")
+            net = (items.get("profit net") or 0) - (items.get("pierdere neta") or 0)
+            out.append({
+                "filing_uid": f"{self.registry}:{cui}:bilant:{year}",
+                "registry": self.registry,
+                "entity_id": cui,
+                "filed_at": None,
+                "form": "bilant",
+                "category": "accounts",
+                "description": (
+                    f"Bilanț {year} ({data.get('deni') or cui}): cifra de afaceri {revenue:,.0f} RON, "
+                    f"rezultat net {net:,.0f} RON".replace(",", " ")
+                    if revenue is not None else f"Bilanț {year}"
+                ),
+                "period_end": f"{year}-12-31",
+                "document_url": None,
+                "source_url": self._source_url(cui, year),
             })
         return out

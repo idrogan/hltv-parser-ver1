@@ -11,7 +11,7 @@ import os
 from typing import Optional
 
 from .client import HttpClient, RegistryError
-from .sources import REGISTRIES, Brreg, CompaniesHouse, DanishCVR, SecEdgar
+from .sources import REGISTRIES, Brreg, CompaniesHouse, DanishCVR, RomaniaAnaf, SecEdgar
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class RegistryService:
             "dk_cvr": DanishCVR(http),
             "no_brreg": Brreg(http),
             "us_sec": SecEdgar(http),
+            "ro_anaf": RomaniaAnaf(http),
         }
 
     def filings(self, registry: str, entity_id: str, since: Optional[str] = None, limit: int = 50) -> list[dict]:
@@ -68,3 +69,30 @@ class RegistryService:
 
     def brreg_accounts(self, orgnr: str) -> list[dict]:
         return self.sources["no_brreg"].accounts(orgnr)
+
+    # metric names in the normalized fact format, for registries returning one row per period
+    _BRREG_FIELDS = {
+        "revenue": "revenue", "operating_result": "operating_result", "net_result": "net_result",
+        "equity": "equity", "total_assets": "total_assets",
+    }
+
+    def accounts(self, registry: str, entity_id: str,
+                 from_year: Optional[int] = None, to_year: Optional[int] = None) -> list[dict]:
+        """Key figures as normalized facts (one row per period x metric)."""
+        if registry == "ro_anaf":
+            return self.sources["ro_anaf"].accounts(entity_id, from_year=from_year, to_year=to_year)
+        if registry == "no_brreg":
+            facts = []
+            for row in self.brreg_accounts(entity_id):
+                year = int((row.get("period_end") or "0000")[:4] or 0)
+                if (from_year and year < from_year) or (to_year and year > to_year):
+                    continue
+                for field, metric in self._BRREG_FIELDS.items():
+                    if row.get(field) is not None:
+                        facts.append({
+                            "entity_id": row["entity_id"], "period_end": row["period_end"], "metric": metric,
+                            "value": row[field], "currency": row.get("currency"), "label": field,
+                            "source_url": row.get("source_url"),
+                        })
+            return facts
+        raise RegistryError(f"registry {registry!r} does not expose figures; use /filings")
